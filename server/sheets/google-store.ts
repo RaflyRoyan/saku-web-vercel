@@ -73,7 +73,7 @@ export class GoogleSheetStore implements SheetStore {
           scopes: ["https://www.googleapis.com/auth/spreadsheets"],
         }),
         retry: false, // retry ditangani withRetry
-        timeout: 8000, // function Netlify maksimal ±10 detik
+        timeout: 8000, // jaga di bawah batas durasi Vercel Function
       });
   }
 

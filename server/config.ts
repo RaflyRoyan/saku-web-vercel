@@ -59,8 +59,8 @@ export function getConfig(): AppConfig {
 }
 
 export function createStore(config: AppConfig): SheetStore {
-  // Mode memory hanya untuk dev lokal; data disimpan di .netlify/ (tidak di-commit)
-  if (config.SHEETS_MODE === "memory") return new FileSheetStore(".netlify/saku-memory.json");
+  // Mode memory hanya untuk dev lokal; data disimpan di .data/ (tidak di-commit)
+  if (config.SHEETS_MODE === "memory") return new FileSheetStore(".data/saku-memory.json");
   // superRefine sudah memastikan ketiganya terisi saat SHEETS_MODE=google
   return new GoogleSheetStore({
     spreadsheetId: config.SPREADSHEET_ID!,

@@ -3,11 +3,11 @@
 Aplikasi pencatatan keuangan pribadi multi-pengguna (web + PWA). Catat pemasukan, pengeluaran, dan transfer per akun, tutup buku per periode (gajian ke gajian), sisa saldo otomatis masuk tabungan, dan pengingat langganan bulanan.
 
 ```
-React SPA (PWA) ──fetch /api/* + cookie──▶ Netlify Function (Hono) ──Service Account──▶ Google Sheets
+React SPA (PWA) ──fetch /api/* + cookie──▶ Vercel Function (Hono) ──Service Account──▶ Google Sheets
 ```
 
 - **Frontend:** Vite, React 19, React Router, TanStack Query, Tailwind CSS v4, `vite-plugin-pwa`
-- **Backend:** Hono di satu Netlify Function (`netlify/functions/api.ts` → `server/app.ts`)
+- **Backend:** Hono di satu Vercel Function, runtime Node.js (`api/index.ts` → `server/app.ts`)
 - **Penyimpanan:** Google Sheets (satu spreadsheet, satu sheet per tabel), tanpa database
 - **Auth:** JWT HS256 di cookie HttpOnly `saku_token`, password PBKDF2-SHA256
 
@@ -20,10 +20,10 @@ Butuh Node 22.
 ```bash
 npm install
 cp .env.example .env      # lalu isi, lihat bagian Environment
-npx netlify dev           # http://localhost:8888 (frontend + API)
+npm run dev               # http://localhost:5173 (frontend + API dalam satu server Vite)
 ```
 
-Tanpa akses Google, jalankan dengan data lokal: set `SHEETS_MODE=memory`. Data disimpan di `.netlify/saku-memory.json` (hapus file itu untuk mulai dari kosong).
+Tanpa akses Google, jalankan dengan data lokal: set `SHEETS_MODE=memory`. Data disimpan di `.data/saku-memory.json` (hapus file itu untuk mulai dari kosong).
 
 Buka aplikasi, lalu buat admin pertama di halaman **Setup Awal** (hanya muncul selama sheet `Pengguna` kosong).
 
@@ -61,17 +61,18 @@ Jangan commit `.env` atau file JSON service account.
 
 Kolom dibaca berdasarkan **urutan**, bukan nama header, jadi jangan menyisipkan atau memindahkan kolom.
 
-## Deploy ke Netlify
+## Deploy ke Vercel
 
-1. Hubungkan repo ini ke Netlify. Build command dan folder publish sudah diatur di `netlify.toml` (`npm run build` → `dist`).
-2. **Site settings → Environment variables:** isi `SHEETS_MODE=google`, `SPREADSHEET_ID`, `GOOGLE_CLIENT_EMAIL`, `GOOGLE_PRIVATE_KEY`, `JWT_SECRET`, `JWT_EXPIRE_DAYS`.
+1. Import repo ini di Vercel (**Add New → Project**). Framework, build command, folder output (`dist`), region function (`sin1`, Singapura), dan rewrite sudah diatur di `vercel.json`.
+2. **Settings → Environment Variables** (environment *Production*, juga *Preview* kalau dipakai): isi `SHEETS_MODE=google`, `SPREADSHEET_ID`, `GOOGLE_CLIENT_EMAIL`, `GOOGLE_PRIVATE_KEY`, `JWT_SECRET`, `JWT_EXPIRE_DAYS`.
 3. Deploy, lalu cek `https://<situs>/api/health/sheets`.
 4. Buka situs dan lakukan Setup Awal untuk membuat admin pertama.
 
 ## Struktur
 
 ```
-netlify/functions/api.ts   entry function, meneruskan /api/* ke Hono
+api/index.ts               entry Vercel Function; vercel.json me-rewrite /api/* ke sini
+vercel.json                build, region, rewrite SPA & API, batas durasi function
 server/
   app.ts                   createApp(): middleware + daftar route
   routes/                  handler HTTP per resource

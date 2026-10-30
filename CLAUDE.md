@@ -4,20 +4,20 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 # Saku
 
-Aplikasi pencatatan keuangan pribadi multi-pengguna. Web + PWA, di-host di Netlify. Penyimpanan data = Google Sheets (bukan database).
+Aplikasi pencatatan keuangan pribadi multi-pengguna. Web + PWA, di-host di Vercel. Penyimpanan data = Google Sheets (bukan database).
 
 ```
-React SPA (PWA) ──fetch /api/* + cookie──▶ Netlify Function (Hono) ──Service Account──▶ Google Sheets
+React SPA (PWA) ──fetch /api/* + cookie──▶ Vercel Function (Hono) ──Service Account──▶ Google Sheets
 ```
 
 ## Dokumen
 - docs/SAKU_API_SPEC.md: model data Google Sheets, aturan bisnis, endpoint, skenario uji T1–T17 (sumber kebenaran)
 - docs/02-pekerjaan-dan-tampilan.md: daftar pekerjaan per milestone (M1–M7), penyesuaian stack, desain tampilan
 - docs/01-setup-proyek.md: setup & struktur folder awal (sudah selesai)
-- Spec ditulis untuk .NET/Render/Bearer token. Kalau bertentangan, **02 §2 yang menang** (cookie JWT, tanpa cache/lock, Netlify, Vitest)
+- Spec ditulis untuk .NET/Render/Bearer token. Kalau bertentangan, **02 §2 yang menang** (cookie JWT, tanpa cache/lock, Vitest). Hosting: **Vercel** (dokumen menyebut Netlify; repo ini versi Vercel)
 
 ## Perintah
-- npx netlify dev        → http://localhost:8888 (frontend + API; Vite di 5173 di belakangnya)
+- npm run dev            → http://localhost:5173 (frontend + API: Hono dijalankan di dalam Vite lewat `@hono/vite-dev-server`, env dari `.env`)
 - npm test               → Vitest (sekali jalan)
 - npx vitest run tests/health.test.ts   → satu file test
 - npx vitest run -t "nama test"         → satu test berdasarkan nama
@@ -26,13 +26,13 @@ React SPA (PWA) ──fetch /api/* + cookie──▶ Netlify Function (Hono) ─
 - npm run ikon           → generate ulang ikon PWA & favicon dari `public/logo.svg` (`scripts/buat_ikon.ts`)
 - npm run build          → `tsc -b` (3 tsconfig) + vite build; wajib lulus sebelum commit
 
-Lingkungan: Windows, Node v22 (jangan minta upgrade Node global). netlify-cli dipasang lokal, jalankan via `npx`.
+Lingkungan: Windows, Node v22 (jangan minta upgrade Node global). Deploy lewat integrasi Git Vercel; `vercel` CLI tidak wajib.
 
 ## Arsitektur
-- **Entry API**: `netlify/functions/api.ts` meneruskan semua `/api/*` ke Hono app di `server/app.ts` (`basePath("/api")`). Route baru didaftarkan di app ini.
-- **Lapisan backend** (`server/`): `routes/` → `services/` (aturan bisnis) → `repositories/` → `sheets/store.ts` (interface `SheetStore`). Implementasi: `memory-store.ts` (`MemorySheetStore` untuk test; `FileSheetStore` → `.netlify/saku-memory.json` untuk `SHEETS_MODE=memory` di `netlify dev`, karena tiap request bisa jalan di instance baru) dan `google-store.ts`, dipilih oleh `SHEETS_MODE` di `server/config.ts`.
+- **Entry API**: `api/index.ts` (Vercel Function, `hono/vercel`). `vercel.json` me-rewrite semua `/api/*` ke function ini dan path lain ke `index.html`; URL asli tetap utuh sehingga Hono app di `server/app.ts` (`basePath("/api")`) merutekan. Route baru didaftarkan di app ini. Region `sin1`, `maxDuration` 30 detik.
+- **Lapisan backend** (`server/`): `routes/` → `services/` (aturan bisnis) → `repositories/` → `sheets/store.ts` (interface `SheetStore`). Implementasi: `memory-store.ts` (`MemorySheetStore` untuk test; `FileSheetStore` → `.data/saku-memory.json` untuk `SHEETS_MODE=memory` di dev lokal, supaya data bertahan saat Vite memuat ulang modul server) dan `google-store.ts`, dipilih oleh `SHEETS_MODE` di `server/config.ts`.
 - **Sheets**: baca/tulis berdasarkan **urutan kolom** di `sheets/schema.ts`, bukan nama header. Nilai dibaca lewat parser toleran `sheets/parse.ts`. Tidak ada cache lintas request: tiap handler 1 `values:batchGet` untuk semua sheet yang dibutuhkan (termasuk `Pengguna` untuk validasi token). Sebelum update/hapus, cari nomor baris dari `id` pada bacaan terbaru.
-- **Batas waktu** function ±10 detik: operasi besar (tutup periode) digabung ke `values:batchUpdate` / append multi-baris, dan harus idempoten.
+- **Batas waktu** function `maxDuration` 30 detik (`vercel.json`), timeout request Google 8 detik: operasi besar (tutup periode) digabung ke `values:batchUpdate` / append multi-baris, dan harus idempoten.
 - **Master bersama**: `Akun` & `Kategori` dipakai semua pengguna (tanpa `user_id`), hanya admin yang boleh menulis. Tidak ada sheet `KategoriDefault` (02 §2).
 - **Isolasi data**: sheet lain kecuali `Pengguna` difilter `user_id`; ID milik user lain → 404. Kolom audit diisi dari JWT, tidak pernah dari body.
 - **Waktu**: server UTC, semua tanggal dihitung WIB lewat `server/common/clock.ts` (bisa di-mock di test).
@@ -47,7 +47,7 @@ Lingkungan: Windows, Node v22 (jangan minta upgrade Node global). netlify-cli di
 - Tiap milestone punya skenario T# yang wajib lulus (spec §14).
 
 ## Aturan
-- TypeScript strict. Frontend di src/, backend di server/, entry function di netlify/functions/api.ts
+- TypeScript strict. Frontend di src/, backend di server/, entry function di api/index.ts
 - Kode browser tidak boleh import dari server/
 - `erasableSyntaxOnly` aktif di `src/` (tsconfig.app.json): tanpa parameter property, enum, atau namespace
 - Pesan error & teks UI: Bahasa Indonesia

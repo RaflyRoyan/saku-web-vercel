@@ -78,8 +78,8 @@ export class MemorySheetStore implements SheetStore {
 }
 
 /**
- * Memory store yang disimpan ke file JSON, untuk `SHEETS_MODE=memory` di `netlify dev`
- * (setiap request bisa jalan di instance baru, jadi isi memori biasa hilang).
+ * Memory store yang disimpan ke file JSON, untuk `SHEETS_MODE=memory` di dev lokal
+ * (data tetap ada walau modul server dimuat ulang oleh Vite saat file diubah).
  */
 export class FileSheetStore implements SheetStore {
   private file: string;

@@ -25,6 +25,7 @@ dist-ssr
 
 # Saku
 .env
-.netlify
+.data
+.vercel
 service-account*.json
 *.key.json

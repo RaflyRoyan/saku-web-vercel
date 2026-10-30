@@ -26,7 +26,7 @@ Aksi yang paling sering: **catat pengeluaran** (harus bisa selesai < 10 detik di
 
 | Bagian spec | Diganti menjadi |
 |---|---|
-| §2 Stack, §3 Struktur | Hono + Netlify Function + Vite React, struktur di `01-setup-proyek.md` |
+| §2 Stack, §3 Struktur | Hono + Vercel Function (`api/index.ts`) + Vite React, struktur di `01-setup-proyek.md` (bagian Netlify diganti Vercel) |
 | §4 Env | `SPREADSHEET_ID`, `GOOGLE_CLIENT_EMAIL`, `GOOGLE_PRIVATE_KEY`, `JWT_SECRET`, `JWT_EXPIRE_DAYS`, `SHEETS_MODE`. Tidak ada `PORT`/`CORS_ORIGINS` |
 | §5.2 `Pengguna` | Tambah kolom **`gagal_login`** (angka) dan **`terkunci_sampai`** (datetime) setelah `versi_token`, sebelum kolom audit. Perbarui juga `template/buat_template.py` |
 | §6.1 Token | JWT HS256 (`hono/jwt`) di **cookie** `saku_token`: `HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=JWT_EXPIRE_DAYS`. Di lokal (http) tanpa `Secure`. Setup/login/ganti password **set cookie**. Body response tanpa `token`, hanya `{ pengguna, expiresAt }`. Tambah `POST /api/auth/logout` |
@@ -39,7 +39,7 @@ Aksi yang paling sering: **catat pengeluaran** (harus bisa selesai < 10 detik di
 | §5.1 Waktu | Server berjalan di UTC. Semua tanggal dihitung di **WIB (UTC+7)** lewat `server/common/clock.ts` (bisa di-mock) |
 | §10.10 Health | `/api/health` dan `/api/health/sheets` |
 | §11 | Tanpa rate limit per IP, tanpa Swagger |
-| §12 Deploy | Netlify (sudah di dokumen 01) |
+| §12 Deploy | Vercel (`vercel.json`, region `sin1`). Dokumen 01 masih menyebut Netlify |
 | §13 Test | Vitest + `memory-store` + clock palsu. Test endpoint dengan `app.request()` |
 | §5.1 butir 3, §5.2 `Akun`/`Kategori`/`KategoriDefault` | **Akun dan Kategori adalah master bersama** untuk semua pengguna: kolom `user_id` dihapus dari kedua sheet, sheet `KategoriDefault` dihapus. Kategori awal (termasuk 2 kategori sistem) langsung ada di sheet `Kategori` template. Sheet lain (`Periode`, `SaldoAwal`, `Transaksi`, `Berulang`, `BerulangLewati`, `Tabungan`) tetap per pengguna lewat `user_id` |
 | §6.3 Peran, §10.3, §10.4 | `GET` akun & kategori boleh semua pengguna. `POST`/`PUT` akun & kategori **hanya admin** (bukan admin → 403). `saldo` di `GET /api/akun` dihitung dari data pengguna yang login saja |
