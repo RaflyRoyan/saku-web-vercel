@@ -1,7 +1,7 @@
 import { z } from "zod";
-import { GoogleSheetStore } from "./sheets/google-store";
-import { FileSheetStore } from "./sheets/memory-store";
-import type { SheetStore } from "./sheets/store";
+import { GoogleSheetStore } from "./sheets/google-store.js";
+import { FileSheetStore } from "./sheets/memory-store.js";
+import type { SheetStore } from "./sheets/store.js";
 
 const envSchema = z
   .object({

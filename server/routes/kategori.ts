@@ -1,10 +1,10 @@
 import { Hono } from "hono";
 import { z } from "zod";
-import type { AppEnv } from "../app";
-import { loadSession, requireAdmin, requireAuth } from "../auth/session";
-import { AppError } from "../common/errors";
-import { jsonBody } from "../common/validation";
-import { newId, newRow, notFound, rowsOf, updatedRow, type ParsedRow } from "../repositories/rows";
+import type { AppEnv } from "../app.js";
+import { loadSession, requireAdmin, requireAuth } from "../auth/session.js";
+import { AppError } from "../common/errors.js";
+import { jsonBody } from "../common/validation.js";
+import { newId, newRow, notFound, rowsOf, updatedRow, type ParsedRow } from "../repositories/rows.js";
 
 // Kategori = master bersama semua pengguna; hanya admin yang menulis (02 §2).
 

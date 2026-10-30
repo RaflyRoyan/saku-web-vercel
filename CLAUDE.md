@@ -49,6 +49,7 @@ Lingkungan: Windows, Node v22 (jangan minta upgrade Node global). Deploy lewat i
 ## Aturan
 - TypeScript strict. Frontend di src/, backend di server/, entry function di api/index.ts
 - Kode browser tidak boleh import dari server/
+- Import relatif di `server/` dan `api/` **wajib berakhiran `.js`** (mis. `from "../common/errors.js"`): Vercel mengompilasi per file ke ESM tanpa bundling, import tanpa ekstensi membuat function crash (`FUNCTION_INVOCATION_FAILED`)
 - `erasableSyntaxOnly` aktif di `src/` (tsconfig.app.json): tanpa parameter property, enum, atau namespace
 - Pesan error & teks UI: Bahasa Indonesia
 - Jangan commit .env atau kredensial apa pun

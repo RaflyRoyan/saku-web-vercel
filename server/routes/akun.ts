@@ -1,13 +1,13 @@
 import { Hono } from "hono";
 import { z } from "zod";
-import type { AppEnv } from "../app";
-import { loadSession, requireAdmin, requireAuth } from "../auth/session";
-import { AppError } from "../common/errors";
-import { formatRupiah } from "../common/format";
-import { jsonBody } from "../common/validation";
-import { newId, newRow, notFound, rowsOf, updatedRow, type ParsedRow } from "../repositories/rows";
-import { periodeAktif, saldoAkunSemuaPengguna, saldoPerAkun } from "../services/saldo";
-import type { RowUpdate } from "../sheets/store";
+import type { AppEnv } from "../app.js";
+import { loadSession, requireAdmin, requireAuth } from "../auth/session.js";
+import { AppError } from "../common/errors.js";
+import { formatRupiah } from "../common/format.js";
+import { jsonBody } from "../common/validation.js";
+import { newId, newRow, notFound, rowsOf, updatedRow, type ParsedRow } from "../repositories/rows.js";
+import { periodeAktif, saldoAkunSemuaPengguna, saldoPerAkun } from "../services/saldo.js";
+import type { RowUpdate } from "../sheets/store.js";
 
 // Akun = master bersama semua pengguna; hanya admin yang menulis (02 §2).
 

@@ -1,7 +1,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
-import { headerOf, SHEET_NAMES, type SheetName } from "./schema";
-import { SheetMissingError, type CellValue, type RowUpdate, type SheetData, type SheetStore } from "./store";
+import { headerOf, SHEET_NAMES, type SheetName } from "./schema.js";
+import { SheetMissingError, type CellValue, type RowUpdate, type SheetData, type SheetStore } from "./store.js";
 
 type Grid = CellValue[][];
 

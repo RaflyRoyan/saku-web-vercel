@@ -1,6 +1,6 @@
 import { zValidator } from "@hono/zod-validator";
 import type { z } from "zod";
-import { validationError, type FieldErrors } from "./errors";
+import { validationError, type FieldErrors } from "./errors.js";
 
 /** Issue zod → `{ field: [pesan] }` (nama field camelCase sesuai body). */
 export function fieldErrors(error: { issues: readonly { path: readonly PropertyKey[]; message: string }[] }): FieldErrors {

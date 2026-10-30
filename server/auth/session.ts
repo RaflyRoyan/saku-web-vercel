@@ -1,10 +1,10 @@
 import type { Context, MiddlewareHandler } from "hono";
-import type { AppEnv } from "../app";
-import { AppError } from "../common/errors";
-import { rowsOf, type ParsedRow } from "../repositories/rows";
-import type { SheetName } from "../sheets/schema";
-import type { SheetData } from "../sheets/store";
-import { clearToken, readToken } from "./token";
+import type { AppEnv } from "../app.js";
+import { AppError } from "../common/errors.js";
+import { rowsOf, type ParsedRow } from "../repositories/rows.js";
+import type { SheetName } from "../sheets/schema.js";
+import type { SheetData } from "../sheets/store.js";
+import { clearToken, readToken } from "./token.js";
 
 const UNSAFE_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 

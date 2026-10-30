@@ -1,7 +1,7 @@
 import { auth, sheets, type sheets_v4 } from "@googleapis/sheets";
-import { storageError } from "../common/errors";
-import { lastColumn, type SheetName } from "./schema";
-import { SheetMissingError, type CellValue, type RowUpdate, type SheetData, type SheetStore } from "./store";
+import { storageError } from "../common/errors.js";
+import { lastColumn, type SheetName } from "./schema.js";
+import { SheetMissingError, type CellValue, type RowUpdate, type SheetData, type SheetStore } from "./store.js";
 
 export interface GoogleStoreOptions {
   spreadsheetId: string;

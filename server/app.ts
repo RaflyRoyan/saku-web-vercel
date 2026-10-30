@@ -1,21 +1,21 @@
 import { Hono } from "hono";
-import { DEFAULT_ITERATIONS } from "./auth/password";
-import { csrf } from "./auth/session";
-import type { Claims } from "./auth/token";
-import { systemClock, type Clock } from "./common/clock";
-import { problem, problemFromError } from "./common/errors";
-import { getConfig, getStore } from "./config";
-import { akun } from "./routes/akun";
-import { auth } from "./routes/auth";
-import { berulang } from "./routes/berulang";
-import { dashboard } from "./routes/dashboard";
-import { health } from "./routes/health";
-import { kategori } from "./routes/kategori";
-import { pengguna } from "./routes/pengguna";
-import { periode } from "./routes/periode";
-import { tabungan } from "./routes/tabungan";
-import { transaksi } from "./routes/transaksi";
-import type { SheetStore } from "./sheets/store";
+import { DEFAULT_ITERATIONS } from "./auth/password.js";
+import { csrf } from "./auth/session.js";
+import type { Claims } from "./auth/token.js";
+import { systemClock, type Clock } from "./common/clock.js";
+import { problem, problemFromError } from "./common/errors.js";
+import { getConfig, getStore } from "./config.js";
+import { akun } from "./routes/akun.js";
+import { auth } from "./routes/auth.js";
+import { berulang } from "./routes/berulang.js";
+import { dashboard } from "./routes/dashboard.js";
+import { health } from "./routes/health.js";
+import { kategori } from "./routes/kategori.js";
+import { pengguna } from "./routes/pengguna.js";
+import { periode } from "./routes/periode.js";
+import { tabungan } from "./routes/tabungan.js";
+import { transaksi } from "./routes/transaksi.js";
+import type { SheetStore } from "./sheets/store.js";
 
 export interface Settings {
   jwtSecret: string;

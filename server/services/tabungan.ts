@@ -1,7 +1,7 @@
-import type { Clock } from "../common/clock";
-import { newId, newRow, updatedRow, type ParsedRow } from "../repositories/rows";
-import type { CellValue, RowUpdate, SheetStore } from "../sheets/store";
-import { saldoPerAkun } from "./saldo";
+import type { Clock } from "../common/clock.js";
+import { newId, newRow, updatedRow, type ParsedRow } from "../repositories/rows.js";
+import type { CellValue, RowUpdate, SheetStore } from "../sheets/store.js";
+import { saldoPerAkun } from "./saldo.js";
 
 export interface SetorPlan {
   /** Baris setor yang sudah ada dan nilainya berubah. */

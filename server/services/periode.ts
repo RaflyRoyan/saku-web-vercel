@@ -1,5 +1,5 @@
-import { AppError } from "../common/errors";
-import type { ParsedRow } from "../repositories/rows";
+import { AppError } from "../common/errors.js";
+import type { ParsedRow } from "../repositories/rows.js";
 
 export interface PeriodeDto {
   id: string;

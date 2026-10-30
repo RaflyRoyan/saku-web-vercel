@@ -1,4 +1,4 @@
-import type { ParsedRow } from "../repositories/rows";
+import type { ParsedRow } from "../repositories/rows.js";
 
 type B = ParsedRow<"Berulang">["data"];
 

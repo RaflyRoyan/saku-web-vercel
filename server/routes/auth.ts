@@ -1,13 +1,13 @@
 import { Hono } from "hono";
 import { z } from "zod";
-import type { AppEnv } from "../app";
-import { hashPassword, verifyPassword } from "../auth/password";
-import { loadSession, requireAuth } from "../auth/session";
-import { clearToken, issueToken } from "../auth/token";
-import { nowWibIso, toWibIso } from "../common/clock";
-import { AppError } from "../common/errors";
-import { jsonBody } from "../common/validation";
-import { newRow, rowsOf, updatedRow } from "../repositories/rows";
+import type { AppEnv } from "../app.js";
+import { hashPassword, verifyPassword } from "../auth/password.js";
+import { loadSession, requireAuth } from "../auth/session.js";
+import { clearToken, issueToken } from "../auth/token.js";
+import { nowWibIso, toWibIso } from "../common/clock.js";
+import { AppError } from "../common/errors.js";
+import { jsonBody } from "../common/validation.js";
+import { newRow, rowsOf, updatedRow } from "../repositories/rows.js";
 import {
   buildPengguna,
   ensureKategoriSistem,
@@ -16,7 +16,7 @@ import {
   passwordSchema,
   toDto,
   usernameSchema,
-} from "../services/pengguna";
+} from "../services/pengguna.js";
 
 const MAX_GAGAL = 5;
 const LOCK_MS = 15 * 60 * 1000;

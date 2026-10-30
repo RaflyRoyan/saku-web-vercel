@@ -1,10 +1,10 @@
 import { z } from "zod";
-import { passwordProblem } from "../auth/password";
-import type { Clock } from "../common/clock";
-import { AppError } from "../common/errors";
-import { newId, newRow, rowsOf, updatedRow, type ParsedRow } from "../repositories/rows";
-import type { Baris } from "../sheets/schema";
-import type { RowUpdate, SheetData, SheetStore } from "../sheets/store";
+import { passwordProblem } from "../auth/password.js";
+import type { Clock } from "../common/clock.js";
+import { AppError } from "../common/errors.js";
+import { newId, newRow, rowsOf, updatedRow, type ParsedRow } from "../repositories/rows.js";
+import type { Baris } from "../sheets/schema.js";
+import type { RowUpdate, SheetData, SheetStore } from "../sheets/store.js";
 
 // ---------- Schema body ----------
 

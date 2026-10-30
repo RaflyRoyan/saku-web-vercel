@@ -1,8 +1,8 @@
 import { Hono } from "hono";
-import type { AppEnv } from "../app";
-import { problem } from "../common/errors";
-import { SHEET_NAMES, validateHeader, type SheetName } from "../sheets/schema";
-import { SheetMissingError, type SheetData } from "../sheets/store";
+import type { AppEnv } from "../app.js";
+import { problem } from "../common/errors.js";
+import { SHEET_NAMES, validateHeader, type SheetName } from "../sheets/schema.js";
+import { SheetMissingError, type SheetData } from "../sheets/store.js";
 
 interface StatusSheet {
   nama: SheetName;

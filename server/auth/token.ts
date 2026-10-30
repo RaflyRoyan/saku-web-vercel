@@ -1,7 +1,7 @@
 import type { Context } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import { sign, verify } from "hono/jwt";
-import type { AppEnv } from "../app";
+import type { AppEnv } from "../app.js";
 
 export const COOKIE_NAME = "saku_token";
 const DAY_MS = 24 * 60 * 60 * 1000;

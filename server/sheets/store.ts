@@ -1,4 +1,4 @@
-import type { SheetName } from "./schema";
+import type { SheetName } from "./schema.js";
 
 /** Nilai mentah satu sel, seperti dikembalikan Sheets API (UNFORMATTED_VALUE). */
 export type CellValue = string | number | boolean;

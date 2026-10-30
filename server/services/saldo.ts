@@ -1,4 +1,4 @@
-import type { ParsedRow } from "../repositories/rows";
+import type { ParsedRow } from "../repositories/rows.js";
 
 /** Periode aktif (tanggal_selesai kosong) milik pengguna. Maksimal satu. */
 export function periodeAktif(periode: ParsedRow<"Periode">[], userId: string): ParsedRow<"Periode"> | undefined {

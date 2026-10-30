@@ -1,5 +1,5 @@
-import type { ParsedRow } from "../repositories/rows";
-import { periodeDto, type PeriodeDto } from "./periode";
+import type { ParsedRow } from "../repositories/rows.js";
+import { periodeDto, type PeriodeDto } from "./periode.js";
 
 export interface PerKategori {
   kategoriId: string;

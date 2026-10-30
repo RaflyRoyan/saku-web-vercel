@@ -1,11 +1,11 @@
 import { Hono } from "hono";
 import { z } from "zod";
-import type { AppEnv } from "../app";
-import { hashPassword } from "../auth/password";
-import { loadSession, requireAdmin, requireAuth } from "../auth/session";
-import { AppError } from "../common/errors";
-import { jsonBody } from "../common/validation";
-import { newRow, notFound, rowsOf, updatedRow } from "../repositories/rows";
+import type { AppEnv } from "../app.js";
+import { hashPassword } from "../auth/password.js";
+import { loadSession, requireAdmin, requireAuth } from "../auth/session.js";
+import { AppError } from "../common/errors.js";
+import { jsonBody } from "../common/validation.js";
+import { newRow, notFound, rowsOf, updatedRow } from "../repositories/rows.js";
 import {
   assertUsernameFree,
   buildPengguna,
@@ -15,7 +15,7 @@ import {
   peranSchema,
   toDto,
   usernameSchema,
-} from "../services/pengguna";
+} from "../services/pengguna.js";
 
 export const pengguna = new Hono<AppEnv>();
 
