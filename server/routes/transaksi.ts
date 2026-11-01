@@ -16,11 +16,12 @@ import {
 } from "../services/transaksi.js";
 import type { SheetData } from "../sheets/store.js";
 
-const SHEETS = ["Akun", "Kategori", "Periode", "SaldoAwal", "Transaksi", "Tabungan"] as const;
+const SHEETS = ["Akun", "AkunPengguna", "Kategori", "Periode", "SaldoAwal", "Transaksi", "Tabungan"] as const;
 
 function parseAll(data: Record<(typeof SHEETS)[number], SheetData>) {
   return {
     akun: rowsOf(data, "Akun"),
+    akunPengguna: rowsOf(data, "AkunPengguna"),
     kategori: rowsOf(data, "Kategori"),
     periode: rowsOf(data, "Periode"),
     saldoAwal: rowsOf(data, "SaldoAwal"),

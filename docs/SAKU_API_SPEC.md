@@ -164,6 +164,16 @@ Aplikasi **gagal start** dengan pesan jelas kalau env wajib kosong.
 | F | aktif | boolean | |
 | G–J | audit | | |
 
+**`AkunPengguna`** (akun master yang dipakai tiap pengguna, §7.1)
+
+| # | Kolom | Tipe | Aturan |
+|---|---|---|---|
+| A | id | teks | `AP-…` |
+| B | user_id | teks | |
+| C | akun_id | teks | ID `Akun`, satu baris per akun per pengguna |
+| D | urutan | angka | urutan milik pengguna, mulai 1 |
+| E–H | audit | | |
+
 **`Kategori`**
 
 | # | Kolom | Tipe | Aturan |
@@ -314,6 +324,12 @@ Aplikasi **gagal start** dengan pesan jelas kalau env wajib kosong.
 - Akun atau kategori yang **nonaktif** tidak boleh dipakai di transaksi baru, saldo awal baru, atau langganan baru. Tetapi tetap tampil di riwayat dan ringkasan kalau punya data di periode tersebut.
 - Akun tidak bisa dinonaktifkan kalau saldonya di periode aktif ≠ 0 → 409 `"Saldo akun masih Rp X. Pindahkan dulu sebelum dinonaktifkan."`
 - Ubah nama, jenis, dan urutan selalu boleh.
+- **Akun pilihan pengguna** (sheet `AkunPengguna`, diatur di Pengaturan → Akun saya): tiap pengguna memilih akun master yang dipakai + urutannya sendiri.
+  - Pengguna yang belum punya baris sama sekali = memakai semua akun aktif dengan urutan master (pengguna lama).
+  - Setelah pilihan disimpan, akun baru dari admin **tidak** otomatis dipilih.
+  - Akun yang tidak dipilih ditolak di transaksi baru (asal/tujuan), langganan, tarik tabungan, dan saldo awal > 0 → 400 `"Akun X belum dipilih di Pengaturan."`. Nilai lama saat edit tetap boleh.
+  - Akun tidak bisa dilepas kalau saldonya di periode aktif pengguna ≠ 0 → 409 `"Saldo X masih Rp Y. Pindahkan dulu sebelum akun dilepas."`
+  - Ringkasan menampilkan akun aktif yang dipilih + akun lain yang punya data di periode itu, urut menurut pengguna.
 
 ### 7.2 Penentuan `periode_id` transaksi
 
@@ -476,7 +492,9 @@ Semua endpoint di bawah `/api` wajib token, kecuali yang ditandai 🔓.
 
 | Method | Path | Body / Query | Keterangan |
 |---|---|---|---|
-| GET | `/api/akun?termasukNonaktif=false` | | Diurutkan `urutan`. Sertakan `saldo` pada periode aktif (atau `null` kalau belum ada periode) |
+| GET | `/api/akun?termasukNonaktif=false` | | `false`: akun aktif yang dipilih pengguna, urut pengguna. `true`: semua akun, urut `urutan` master. Sertakan `saldo` pada periode aktif (atau `null` kalau belum ada periode), `dipilih`, dan `urutanSaya` |
+| GET | `/api/akun/pilihan` | | `{ eksplisit, akun: [{ id, nama, jenis, dipilih, saldo }] }`. Akun aktif: yang dipilih dulu (urut pengguna), lalu sisanya |
+| PUT | `/api/akun/pilihan` | `{ ids: [...] }` | Ganti pilihan akun pengguna; urutan = urutan `ids`. Minimal 1, akun harus aktif. Aturan §7.1 |
 | POST | `/api/akun` | `{ nama, jenis, urutan? }` | |
 | PUT | `/api/akun/{id}` | `{ nama, jenis, urutan }` | |
 | PUT | `/api/akun/{id}/aktif` | `{ aktif }` | Aturan §7.1 |

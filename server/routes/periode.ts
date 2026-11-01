@@ -6,6 +6,7 @@ import { todayWib } from "../common/clock.js";
 import { AppError, validationError, type FieldErrors } from "../common/errors.js";
 import { jsonBody } from "../common/validation.js";
 import { findOwned, newId, newRow, rowsOf, updatedRow, type ParsedRow } from "../repositories/rows.js";
+import { pesanBelumDipilih, pilihanAkun, type PilihanAkun } from "../services/akun-pengguna.js";
 import { addDays, namaDefault, periodeDto, periodeMilik } from "../services/periode.js";
 import { hitungRingkasan } from "../services/ringkasan.js";
 import { periodeAktif, saldoPerAkun } from "../services/saldo.js";
@@ -35,10 +36,11 @@ const saldoAwalSchema = z.array(
 type SaldoAwalInput = z.infer<typeof saldoAwalSchema>;
 
 /**
- * Akun saldo awal harus ada, aktif, dan tidak dobel (spec §7.4 butir 1).
- * `boleh` = akun nonaktif yang sudah punya saldo awal di periode itu (saat edit) tetap boleh.
+ * Akun saldo awal harus ada, aktif, dipilih pengguna, dan tidak dobel (spec §7.4 butir 1).
+ * Saldo 0 tidak disimpan, jadi akun yang tidak dipilih boleh dikirim dengan saldo 0.
+ * `boleh` = akun yang sudah punya saldo awal di periode itu (saat edit) tetap boleh walau nonaktif/dilepas.
  */
-function cekSaldoAwal(items: SaldoAwalInput, akun: ParsedRow<"Akun">[], boleh: Set<string> = new Set()) {
+function cekSaldoAwal(items: SaldoAwalInput, akun: ParsedRow<"Akun">[], pilihan: PilihanAkun, boleh: Set<string> = new Set()) {
   const errors: FieldErrors = {};
   const seen = new Set<string>();
   items.forEach((item, i) => {
@@ -46,6 +48,7 @@ function cekSaldoAwal(items: SaldoAwalInput, akun: ParsedRow<"Akun">[], boleh: S
     const a = akun.find((r) => r.data.id === item.akunId)?.data;
     if (!a) errors[key] = ["Akun tidak ditemukan."];
     else if (!a.aktif && !boleh.has(a.id)) errors[key] = [`Akun ${a.nama} nonaktif dan tidak bisa dipakai.`];
+    else if (item.saldo > 0 && !pilihan.dipilih(a.id) && !boleh.has(a.id)) errors[key] = [pesanBelumDipilih(a.nama)];
     else if (seen.has(item.akunId)) errors[key] = [`Akun ${a.nama} dobel.`];
     seen.add(item.akunId);
   });
@@ -73,14 +76,19 @@ periode.get("/aktif", async (c) => {
 
 /** Pratinjau sisa setiap akun yang akan masuk tabungan saat periode aktif ditutup, tanpa menulis (spec §7.4). */
 periode.get("/aktif/pratinjau-tutup", async (c) => {
-  const { user, data } = await loadSession(c, ["Akun", "Periode", "SaldoAwal", "Transaksi"]);
+  const { user, data } = await loadSession(c, ["Akun", "AkunPengguna", "Periode", "SaldoAwal", "Transaksi"]);
   const aktif = periodeAktif(rowsOf(data, "Periode"), user.data.id);
   if (!aktif) throw new AppError(404, "Belum ada periode aktif.");
   const akun = rowsOf(data, "Akun");
-  const urutan = new Map(akun.map((a) => [a.data.id, a.data]));
+  const pilihan = pilihanAkun(rowsOf(data, "AkunPengguna"), user.data.id);
+  const byId = new Map(akun.map((a) => [a.data.id, a.data]));
+  const kunci = (id: string) => {
+    const a = byId.get(id);
+    return a ? pilihan.urutan(a) : Number.MAX_SAFE_INTEGER;
+  };
   const sisa = [...saldoPerAkun(aktif.data.id, rowsOf(data, "SaldoAwal"), rowsOf(data, "Transaksi"))]
-    .map(([akunId, nominal]) => ({ akunId, nama: urutan.get(akunId)?.nama ?? "(akun dihapus)", nominal }))
-    .sort((a, b) => (urutan.get(a.akunId)?.urutan ?? 0) - (urutan.get(b.akunId)?.urutan ?? 0));
+    .map(([akunId, nominal]) => ({ akunId, nama: byId.get(akunId)?.nama ?? "(akun dihapus)", nominal }))
+    .sort((a, b) => kunci(a.akunId) - kunci(b.akunId));
   return c.json({ periode: periodeDto(aktif.data), sisa, total: sisa.reduce((n, s) => n + s.nominal, 0) });
 });
 
@@ -101,7 +109,7 @@ periode.post(
   ),
   async (c) => {
     const body = c.req.valid("json");
-    const { user, data } = await loadSession(c, ["Akun", "Kategori", "Periode", "SaldoAwal", "Transaksi", "Tabungan"]);
+    const { user, data } = await loadSession(c, ["Akun", "AkunPengguna", "Kategori", "Periode", "SaldoAwal", "Transaksi", "Tabungan"]);
     const uid = user.data.id;
     const clock = c.var.clock;
     const akun = rowsOf(data, "Akun");
@@ -112,7 +120,7 @@ periode.post(
 
     const tanggalMulai = body.tanggalMulai ?? todayWib(clock);
     const selesai = addDays(tanggalMulai, -1);
-    cekSaldoAwal(body.saldoAwal, akun);
+    cekSaldoAwal(body.saldoAwal, akun, pilihanAkun(rowsOf(data, "AkunPengguna"), uid));
 
     let tutup: ParsedRow<"Periode"> | undefined;
     const aktif = periodeAktif(semuaPeriode, uid);
@@ -200,14 +208,14 @@ periode.put("/:id", jsonBody(z.object({ nama: namaSchema, keterangan: keterangan
 /** Ganti seluruh saldo awal periode: upsert + hapus yang tidak dikirim (atau 0). Periode tertutup → hitung ulang setor (§7.5). */
 periode.put("/:id/saldo-awal", jsonBody(z.object({ saldoAwal: saldoAwalSchema })), async (c) => {
   const { saldoAwal: items } = c.req.valid("json");
-  const { user, data } = await loadSession(c, ["Akun", "Periode", "SaldoAwal", "Transaksi", "Tabungan"]);
+  const { user, data } = await loadSession(c, ["Akun", "AkunPengguna", "Periode", "SaldoAwal", "Transaksi", "Tabungan"]);
   const uid = user.data.id;
   const clock = c.var.clock;
   const semuaPeriode = rowsOf(data, "Periode");
   const target = findOwned(semuaPeriode, c.req.param("id"), uid);
   const saldoAwal = rowsOf(data, "SaldoAwal");
   const milik = saldoAwal.filter((r) => r.data.user_id === uid && r.data.periode_id === target.data.id);
-  cekSaldoAwal(items, rowsOf(data, "Akun"), new Set(milik.map((r) => r.data.akun_id)));
+  cekSaldoAwal(items, rowsOf(data, "Akun"), pilihanAkun(rowsOf(data, "AkunPengguna"), uid), new Set(milik.map((r) => r.data.akun_id)));
 
   const updates: RowUpdate[] = [];
   const appends: CellValue[][] = [];
@@ -244,7 +252,7 @@ periode.put("/:id/saldo-awal", jsonBody(z.object({ saldoAwal: saldoAwalSchema })
 });
 
 periode.get("/:id/ringkasan", async (c) => {
-  const { user, data } = await loadSession(c, ["Akun", "Kategori", "Periode", "SaldoAwal", "Transaksi", "Tabungan"]);
+  const { user, data } = await loadSession(c, ["Akun", "AkunPengguna", "Kategori", "Periode", "SaldoAwal", "Transaksi", "Tabungan"]);
   const target = findOwned(rowsOf(data, "Periode"), c.req.param("id"), user.data.id);
   return c.json(
     hitungRingkasan(
@@ -254,6 +262,7 @@ periode.get("/:id/ringkasan", async (c) => {
       rowsOf(data, "SaldoAwal"),
       rowsOf(data, "Transaksi"),
       rowsOf(data, "Tabungan"),
+      pilihanAkun(rowsOf(data, "AkunPengguna"), user.data.id),
     ),
   );
 });

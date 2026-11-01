@@ -1,4 +1,5 @@
 import type { ParsedRow } from "../repositories/rows.js";
+import type { PilihanAkun } from "./akun-pengguna.js";
 import { periodeDto, type PeriodeDto } from "./periode.js";
 
 export interface PerKategori {
@@ -64,6 +65,7 @@ export function hitungRingkasan(
   saldoAwal: ParsedRow<"SaldoAwal">[],
   transaksi: ParsedRow<"Transaksi">[],
   tabungan: ParsedRow<"Tabungan">[],
+  pilihan: PilihanAkun,
 ): Ringkasan {
   const namaKategori = new Map(kategori.map((k) => [k.data.id, k.data.nama]));
   const biayaAdminKat = kategori.find((k) => k.data.kode_sistem === "BIAYA_ADMIN")?.data;
@@ -132,11 +134,10 @@ export function hitungRingkasan(
     }
   }
 
-  // Semua akun aktif + akun nonaktif yang punya data di periode ini, urut `urutan`
+  // Akun aktif yang dipilih pengguna + akun lain yang punya data di periode ini, urut menurut pengguna
   const daftar: RingkasanAkun[] = [];
-  const urutAkun = [...akun].sort((a, b) => (a.data.urutan ?? 0) - (b.data.urutan ?? 0) || a.data.nama.localeCompare(b.data.nama, "id"));
-  for (const { data: a } of urutAkun) {
-    if (!a.aktif && !punyaData.has(a.id)) continue;
+  for (const { data: a } of pilihan.urutkan(akun)) {
+    if (!(a.aktif && pilihan.dipilih(a.id)) && !punyaData.has(a.id)) continue;
     const { kat, ...r } = get(a.id);
     r.nama = a.nama;
     r.jenis = a.jenis;

@@ -12,7 +12,7 @@ import { Input, Switch } from "../components/ui/Input";
 import { MoneyInput } from "../components/ui/MoneyInput";
 import { EmptyState, ErrorState, ListSkeleton } from "../components/ui/States";
 import { useBerulang, type Berulang } from "../hooks/useBerulang";
-import { useAkun, useKategori } from "../hooks/useMaster";
+import { akunUntukForm, useAkun, useKategori } from "../hooks/useMaster";
 import { useToast } from "../hooks/useToast";
 import { invalidateKeuangan } from "../hooks/useTransaksi";
 import { ApiError, send } from "../lib/api";
@@ -75,7 +75,7 @@ function LanggananForm({ edit, onDone }: { edit?: Berulang; onDone: () => void }
     },
   });
   const fe = simpan.error instanceof ApiError ? simpan.error.errors : undefined;
-  const akunOpt = (akun.data ?? []).filter((a) => a.aktif || a.id === edit?.akunId).map((a) => ({ value: a.id, label: a.nama }));
+  const akunOpt = akunUntukForm(akun.data ?? [], [edit?.akunId]).map((a) => ({ value: a.id, label: a.nama }));
   const katOpt = (kategori.data ?? [])
     .filter((k) => k.tipe === "keluar" && !k.kodeSistem && (k.aktif || k.id === edit?.kategoriId))
     .map((k) => ({ value: k.id, label: k.nama }));

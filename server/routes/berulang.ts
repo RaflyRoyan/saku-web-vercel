@@ -16,6 +16,7 @@ import {
   statusBulan,
   type Pengingat,
 } from "../services/berulang.js";
+import { pesanBelumDipilih, pilihanAkun } from "../services/akun-pengguna.js";
 import { rencanaSetorTerdampak, simpanSetor } from "../services/tabungan.js";
 import { peringatanSaldo, resolveTransaksi, transaksiMapper } from "../services/transaksi.js";
 import type { SheetData } from "../sheets/store.js";
@@ -48,11 +49,12 @@ const berulangBody = z.object({
   selesai: bulanSchema.nullish(),
 });
 
-const SHEETS = ["Akun", "Kategori", "Periode", "SaldoAwal", "Transaksi", "Tabungan", "Berulang", "BerulangLewati"] as const;
+const SHEETS = ["Akun", "AkunPengguna", "Kategori", "Periode", "SaldoAwal", "Transaksi", "Tabungan", "Berulang", "BerulangLewati"] as const;
 
 function parseAll(data: Record<(typeof SHEETS)[number], SheetData>) {
   return {
     akun: rowsOf(data, "Akun"),
+    akunPengguna: rowsOf(data, "AkunPengguna"),
     kategori: rowsOf(data, "Kategori"),
     periode: rowsOf(data, "Periode"),
     saldoAwal: rowsOf(data, "SaldoAwal"),
@@ -129,11 +131,15 @@ export function pengingatDto(s: Sheets, userId: string, hari: string) {
 }
 
 /** Akun aktif & kategori `keluar` aktif bukan kategori sistem (spec §5.2 Berulang, §7.1). */
-function cekMaster(s: Sheets, body: z.infer<typeof berulangBody>, current?: B) {
+function cekMaster(s: Sheets, userId: string, body: z.infer<typeof berulangBody>, current?: B) {
   const errors: FieldErrors = {};
   const a = s.akun.find((r) => r.data.id === body.akunId)?.data;
   if (!a) errors.akunId = ["Akun tidak ditemukan."];
-  else if (!a.aktif && a.id !== current?.akun_id) errors.akunId = [`Akun ${a.nama} nonaktif dan tidak bisa dipakai.`];
+  // Akun lama tetap boleh walau sudah nonaktif atau dilepas dari pilihan
+  else if (a.id !== current?.akun_id) {
+    if (!a.aktif) errors.akunId = [`Akun ${a.nama} nonaktif dan tidak bisa dipakai.`];
+    else if (!pilihanAkun(s.akunPengguna, userId).dipilih(a.id)) errors.akunId = [pesanBelumDipilih(a.nama)];
+  }
   const k = s.kategori.find((r) => r.data.id === body.kategoriId)?.data;
   if (!k) errors.kategoriId = ["Kategori tidak ditemukan."];
   else if (k.tipe !== "keluar" || k.kode_sistem) errors.kategoriId = [`Kategori ${k.nama} bukan kategori pengeluaran biasa.`];
@@ -184,7 +190,7 @@ berulang.post("/", jsonBody(berulangBody), async (c) => {
   const { user, data } = await loadSession(c, SHEETS);
   const uid = user.data.id;
   const s = parseAll(data);
-  cekMaster(s, body);
+  cekMaster(s, uid, body);
   const baru = { id: newId("Berulang", s.berulang), user_id: uid, ...kolom(body), aktif: true };
   await c.var.store().append("Berulang", [newRow("Berulang", baru, uid, c.var.clock)]);
   const hari = todayWib(c.var.clock);
@@ -198,7 +204,7 @@ berulang.put("/:id", jsonBody(berulangBody.extend({ aktif: z.boolean({ error: "A
   const uid = user.data.id;
   const s = parseAll(data);
   const target = findOwned(s.berulang, c.req.param("id"), uid);
-  cekMaster(s, body, target.data);
+  cekMaster(s, uid, body, target.data);
   const changes = { ...kolom(body), aktif: body.aktif };
   await c.var.store().updateRow("Berulang", target.row, updatedRow("Berulang", target.data, changes, uid, c.var.clock));
   const hari = todayWib(c.var.clock);

@@ -3,13 +3,14 @@ import type { AppEnv } from "../app.js";
 import { loadSession, requireAuth } from "../auth/session.js";
 import { todayWib } from "../common/clock.js";
 import { rowsOf } from "../repositories/rows.js";
+import { pilihanAkun } from "../services/akun-pengguna.js";
 import { hitungRingkasan } from "../services/ringkasan.js";
 import { periodeAktif } from "../services/saldo.js";
 import { totalTabungan } from "../services/tabungan.js";
 import { transaksiMapper, urutTransaksi } from "../services/transaksi.js";
 import { pengingatDto } from "./berulang.js";
 
-const SHEETS = ["Akun", "Kategori", "Periode", "SaldoAwal", "Transaksi", "Tabungan", "Berulang", "BerulangLewati"] as const;
+const SHEETS = ["Akun", "AkunPengguna", "Kategori", "Periode", "SaldoAwal", "Transaksi", "Tabungan", "Berulang", "BerulangLewati"] as const;
 
 export const dashboard = new Hono<AppEnv>();
 
@@ -21,6 +22,7 @@ dashboard.get("/", async (c) => {
   const uid = user.data.id;
   const s = {
     akun: rowsOf(data, "Akun"),
+    akunPengguna: rowsOf(data, "AkunPengguna"),
     kategori: rowsOf(data, "Kategori"),
     periode: rowsOf(data, "Periode"),
     saldoAwal: rowsOf(data, "SaldoAwal"),
@@ -33,7 +35,9 @@ dashboard.get("/", async (c) => {
   const toDto = transaksiMapper(s.akun, s.kategori);
 
   return c.json({
-    ringkasan: aktif ? hitungRingkasan(aktif.data, s.akun, s.kategori, s.saldoAwal, s.transaksi, s.tabungan) : null,
+    ringkasan: aktif
+      ? hitungRingkasan(aktif.data, s.akun, s.kategori, s.saldoAwal, s.transaksi, s.tabungan, pilihanAkun(s.akunPengguna, uid))
+      : null,
     totalTabungan: totalTabungan(s.tabungan, uid),
     pengingat: pengingatDto(s, uid, todayWib(c.var.clock)),
     transaksiTerakhir: aktif

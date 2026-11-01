@@ -3,6 +3,7 @@ import { todayWib, type Clock } from "../common/clock.js";
 import { AppError, validationError, type FieldErrors } from "../common/errors.js";
 import { formatRupiah } from "../common/format.js";
 import type { ParsedRow } from "../repositories/rows.js";
+import { pesanBelumDipilih, pilihanAkun } from "./akun-pengguna.js";
 import { addDays, periodeUntukTanggal } from "./periode.js";
 import { saldoPerAkun } from "./saldo.js";
 
@@ -86,6 +87,7 @@ export function isTarikTabungan(t: T, kategori: ParsedRow<"Kategori">[]): boolea
 
 export interface SheetsTransaksi {
   akun: ParsedRow<"Akun">[];
+  akunPengguna: ParsedRow<"AkunPengguna">[];
   kategori: ParsedRow<"Kategori">[];
   periode: ParsedRow<"Periode">[];
 }
@@ -106,10 +108,13 @@ export function resolveTransaksi(
   const today = todayWib(clock);
   const tanggal = body.tanggal ?? today;
 
+  const pilihan = pilihanAkun(sheets.akunPengguna, userId);
   const cekAkun = (field: "akunId" | "akunTujuanId", id: string, lama?: string) => {
     const a = sheets.akun.find((r) => r.data.id === id)?.data;
     if (!a) err(field, "Akun tidak ditemukan.");
-    else if (!a.aktif && id !== lama) err(field, `Akun ${a.nama} nonaktif dan tidak bisa dipakai.`);
+    else if (id === lama) return;
+    else if (!a.aktif) err(field, `Akun ${a.nama} nonaktif dan tidak bisa dipakai.`);
+    else if (!pilihan.dipilih(id)) err(field, pesanBelumDipilih(a.nama));
   };
 
   cekAkun("akunId", body.akunId, current?.akun_id);

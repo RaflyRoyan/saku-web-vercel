@@ -10,7 +10,7 @@ import { Input } from "../components/ui/Input";
 import { MoneyInput } from "../components/ui/MoneyInput";
 import { SegmentedControl } from "../components/ui/SegmentedControl";
 import { ErrorState, ListSkeleton } from "../components/ui/States";
-import { useAkun, useKategori } from "../hooks/useMaster";
+import { akunUntukForm, useAkun, useKategori } from "../hooks/useMaster";
 import { useToast } from "../hooks/useToast";
 import { invalidateKeuangan, useTransaksi, type TipeTransaksi, type Transaksi, type TransaksiTersimpan } from "../hooks/useTransaksi";
 import { ApiError, send } from "../lib/api";
@@ -155,8 +155,8 @@ function TransaksiForm({ edit }: { edit?: Transaksi }) {
   const fe = err?.errors;
   const tanpaPeriode = err?.status === 422;
 
-  // Akun/kategori nonaktif hanya tampil kalau sedang dipakai transaksi yang diedit
-  const akunAktif = (akun.data ?? []).filter((a) => a.aktif || a.id === edit?.akunId || a.id === edit?.akunTujuanId);
+  // Akun nonaktif/tidak dipilih & kategori nonaktif hanya tampil kalau sedang dipakai transaksi yang diedit
+  const akunAktif = akunUntukForm(akun.data ?? [], [edit?.akunId, edit?.akunTujuanId]);
   const kategoriTipe = (kategori.data ?? []).filter(
     (k) => k.tipe === form.tipe && (k.aktif || k.id === edit?.kategoriId) && (!k.kodeSistem || k.id === edit?.kategoriId),
   );

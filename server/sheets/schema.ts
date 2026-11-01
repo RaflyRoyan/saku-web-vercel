@@ -35,6 +35,14 @@ export const SCHEMA = {
     ["aktif", "boolean"],
     ...AUDIT,
   ],
+  // Akun yang dipakai tiap pengguna + urutannya sendiri. Belum punya baris = semua akun aktif.
+  AkunPengguna: [
+    ["id", "teks"],
+    ["user_id", "teks"],
+    ["akun_id", "teks"],
+    ["urutan", "angka"],
+    ...AUDIT,
+  ],
   Kategori: [
     ["id", "teks"],
     ["nama", "teks"],
@@ -117,6 +125,7 @@ export const SHEET_NAMES = Object.keys(SCHEMA) as SheetName[];
 export const ID_PREFIX = {
   Pengguna: "US",
   Akun: "AK",
+  AkunPengguna: "AP",
   Kategori: "KT",
   Periode: "PR",
   SaldoAwal: "SA",

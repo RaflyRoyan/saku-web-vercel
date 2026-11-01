@@ -7,6 +7,7 @@ import { AppError, validationError } from "../common/errors.js";
 import { formatRupiah } from "../common/format.js";
 import { jsonBody } from "../common/validation.js";
 import { findOwned, newId, newRow, rowsOf, type ParsedRow } from "../repositories/rows.js";
+import { pesanBelumDipilih, pilihanAkun } from "../services/akun-pengguna.js";
 import { addDays } from "../services/periode.js";
 import { periodeAktif } from "../services/saldo.js";
 import { transaksiMapper } from "../services/transaksi.js";
@@ -103,7 +104,7 @@ tabungan.post(
   ),
   async (c) => {
     const body = c.req.valid("json");
-    const { user, data } = await loadSession(c, ["Akun", "Kategori", "Periode", "Transaksi", "Tabungan"]);
+    const { user, data } = await loadSession(c, ["Akun", "AkunPengguna", "Kategori", "Periode", "Transaksi", "Tabungan"]);
     const uid = user.data.id;
     const clock = c.var.clock;
     const today = todayWib(clock);
@@ -120,6 +121,8 @@ tabungan.post(
     const a = akun.find((r) => r.data.id === body.akunId)?.data;
     if (!a) throw validationError({ akunId: ["Akun tidak ditemukan."] });
     if (!a.aktif) throw validationError({ akunId: [`Akun ${a.nama} nonaktif dan tidak bisa dipakai.`] });
+    // Hasil tarik masuk ke saldo akun, jadi akunnya harus dipakai pengguna
+    if (!pilihanAkun(rowsOf(data, "AkunPengguna"), uid).dipilih(a.id)) throw validationError({ akunId: [pesanBelumDipilih(a.nama)] });
 
     const kategori = rowsOf(data, "Kategori");
     const kat = kategori.find((k) => k.data.kode_sistem === "TARIK_TABUNGAN")?.data;
