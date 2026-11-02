@@ -90,7 +90,10 @@ export class FileSheetStore implements SheetStore {
 
   private load(): MemorySheetStore {
     try {
-      return new MemorySheetStore(JSON.parse(readFileSync(this.file, "utf8")) as Partial<Record<SheetName, Grid>>);
+      const grids = JSON.parse(readFileSync(this.file, "utf8")) as Partial<Record<SheetName, Grid>>;
+      // File lama belum punya sheet yang ditambahkan belakangan
+      for (const sheet of SHEET_NAMES) grids[sheet] ??= [headerOf(sheet)];
+      return new MemorySheetStore(grids);
     } catch {
       return new MemorySheetStore();
     }

@@ -7,6 +7,7 @@ import { AppError, validationError, type FieldErrors } from "../common/errors.js
 import { jsonBody } from "../common/validation.js";
 import { findOwned, newId, newRow, rowsOf, updatedRow, type ParsedRow } from "../repositories/rows.js";
 import { pesanBelumDipilih, pilihanAkun, type PilihanAkun } from "../services/akun-pengguna.js";
+import { anggaranMilik, cekAnggaran, hitungAnggaran, salinAnggaran } from "../services/anggaran.js";
 import { addDays, namaDefault, periodeDto, periodeMilik } from "../services/periode.js";
 import { hitungRingkasan } from "../services/ringkasan.js";
 import { periodeAktif, saldoPerAkun } from "../services/saldo.js";
@@ -105,11 +106,13 @@ periode.post(
       tanggalMulai: tanggalSchema.optional(),
       keterangan: keteranganSchema.optional(),
       saldoAwal: saldoAwalSchema.default([]),
+      /** Salin anggaran periode sebelumnya ke periode baru. */
+      salinAnggaran: z.boolean({ error: "salinAnggaran harus true/false." }).default(false),
     }),
   ),
   async (c) => {
     const body = c.req.valid("json");
-    const { user, data } = await loadSession(c, ["Akun", "AkunPengguna", "Kategori", "Periode", "SaldoAwal", "Transaksi", "Tabungan"]);
+    const { user, data } = await loadSession(c, ["Akun", "AkunPengguna", "Kategori", "KelompokKategori", "Periode", "SaldoAwal", "Transaksi", "Tabungan", "Anggaran"]);
     const uid = user.data.id;
     const clock = c.var.clock;
     const akun = rowsOf(data, "Akun");
@@ -124,6 +127,8 @@ periode.post(
 
     let tutup: ParsedRow<"Periode"> | undefined;
     const aktif = periodeAktif(semuaPeriode, uid);
+    // Sumber salinan anggaran = periode terakhir sebelum periode baru
+    const sebelumnya = aktif ?? periodeMilik(semuaPeriode, uid)[0];
     if (aktif) {
       const p = aktif.data;
       if (tanggalMulai <= (p.tanggal_mulai ?? "")) {
@@ -185,11 +190,19 @@ periode.post(
     }
     if (rows.length) await store.append("SaldoAwal", rows);
 
+    let anggaranDisalin = 0;
+    if (body.salinAnggaran && sebelumnya) {
+      const salin = salinAnggaran(rowsOf(data, "Anggaran"), uid, sebelumnya.data.id, baru.id, rowsOf(data, "Kategori"), rowsOf(data, "KelompokKategori"), clock);
+      if (salin.length) await store.append("Anggaran", salin);
+      anggaranDisalin = salin.length;
+    }
+
     const tanpaSetorLama = tabungan.filter((t) => !(t.data.jenis === "setor" && t.data.periode_id === tutup?.data.id));
     return c.json(
       {
         periode: periodeDto(baru),
         setorTabungan: setor,
+        anggaranDisalin,
         totalTabungan: totalTabungan(tanpaSetorLama, uid) + setor.reduce((n, s) => n + s.nominal, 0),
       },
       201,
@@ -267,3 +280,80 @@ periode.get("/:id/ringkasan", async (c) => {
     ),
   );
 });
+
+const ANGGARAN_SHEETS = ["Kategori", "KelompokKategori", "Periode", "Transaksi", "Anggaran"] as const;
+
+/** Anggaran vs realisasi per kategori induk & sub kategori. */
+periode.get("/:id/anggaran", async (c) => {
+  const { user, data } = await loadSession(c, ANGGARAN_SHEETS);
+  const target = findOwned(rowsOf(data, "Periode"), c.req.param("id"), user.data.id);
+  return c.json(
+    hitungAnggaran(target.data.id, user.data.id, rowsOf(data, "Anggaran"), rowsOf(data, "Kategori"), rowsOf(data, "KelompokKategori"), rowsOf(data, "Transaksi")),
+  );
+});
+
+const nominalAnggaran = z
+  .number({ error: "Anggaran harus berupa angka." })
+  .int({ error: "Anggaran harus bilangan bulat." })
+  .min(0, { error: "Anggaran tidak boleh minus." })
+  .max(1_000_000_000_000, { error: "Anggaran terlalu besar." });
+
+/** Ganti seluruh anggaran periode: upsert + hapus yang tidak dikirim (atau 0). Mengembalikan hasil hitung terbaru. */
+periode.put(
+  "/:id/anggaran",
+  jsonBody(
+    z.object({
+      items: z.array(
+        z.object({ kelompokId: z.string().trim().optional(), kategoriId: z.string().trim().optional(), nominal: nominalAnggaran }),
+        { error: "Anggaran harus berupa daftar." },
+      ),
+    }),
+  ),
+  async (c) => {
+    const { items } = c.req.valid("json");
+    const { user, data } = await loadSession(c, ANGGARAN_SHEETS);
+    const uid = user.data.id;
+    const clock = c.var.clock;
+    const target = findOwned(rowsOf(data, "Periode"), c.req.param("id"), uid);
+    const kategori = rowsOf(data, "Kategori");
+    const kelompok = rowsOf(data, "KelompokKategori");
+    const semua = rowsOf(data, "Anggaran");
+    const milik = anggaranMilik(semua, uid, target.data.id);
+    cekAnggaran(items, kategori, kelompok, milik);
+
+    const kunci = (a: { kelompok_id: string; kategori_id: string }) => (a.kategori_id ? `k:${a.kategori_id}` : `g:${a.kelompok_id}`);
+    const kirim = new Map(
+      items.filter((i) => i.nominal > 0).map((i) => [i.kategoriId ? `k:${i.kategoriId}` : `g:${i.kelompokId}`, i]),
+    );
+    const updates: RowUpdate[] = [];
+    const appends: CellValue[][] = [];
+    const hapus: number[] = [];
+    const after = semua.filter((r) => !milik.includes(r));
+    const taken: { data: { id: string } }[] = [...semua];
+
+    for (const r of milik) {
+      const item = kirim.get(kunci(r.data));
+      if (!item) {
+        hapus.push(r.row);
+        continue;
+      }
+      kirim.delete(kunci(r.data));
+      after.push({ row: r.row, data: { ...r.data, nominal: item.nominal } });
+      if (r.data.nominal !== item.nominal) updates.push({ sheet: "Anggaran", row: r.row, values: updatedRow("Anggaran", r.data, { nominal: item.nominal }, uid, clock) });
+    }
+    for (const item of kirim.values()) {
+      const id = newId("Anggaran", taken);
+      taken.push({ data: { id } });
+      const d = { id, user_id: uid, periode_id: target.data.id, kelompok_id: item.kategoriId ? "" : (item.kelompokId ?? ""), kategori_id: item.kategoriId ?? "", nominal: item.nominal };
+      after.push({ row: 0, data: d as ParsedRow<"Anggaran">["data"] });
+      appends.push(newRow("Anggaran", d, uid, clock));
+    }
+
+    const store = c.var.store();
+    if (updates.length) await store.updateRows(updates);
+    if (appends.length) await store.append("Anggaran", appends);
+    // Hapus dari bawah supaya nomor baris yang lain tidak bergeser
+    for (const row of hapus.sort((a, b) => b - a)) await store.deleteRow("Anggaran", row);
+    return c.json(hitungAnggaran(target.data.id, uid, after, kategori, kelompok, rowsOf(data, "Transaksi")));
+  },
+);

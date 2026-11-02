@@ -115,7 +115,7 @@ describe("validasi langganan", () => {
 describe("dashboard", () => {
   it("tanpa periode: ringkasan null; dengan periode: ringkasan, tabungan, pengingat, 5 transaksi terakhir", async () => {
     const t = await siapkan();
-    expect((await t.budi.get("/dashboard")).body).toEqual({ ringkasan: null, totalTabungan: 0, pengingat: [], transaksiTerakhir: [] });
+    expect((await t.budi.get("/dashboard")).body).toEqual({ ringkasan: null, anggaran: null, totalTabungan: 0, pengingat: [], transaksiTerakhir: [] });
 
     await t.budi.post("/periode/mulai", { tanggalMulai: "2026-10-25", saldoAwal: [{ akunId: t.akun.BCA, saldo: 1_000_000 }] });
     for (let i = 1; i <= 6; i++) {

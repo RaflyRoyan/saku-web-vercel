@@ -11,8 +11,9 @@ import { FormError } from "../components/ui/FormError";
 import { Input } from "../components/ui/Input";
 import { MoneyInput } from "../components/ui/MoneyInput";
 import { ErrorState, ListSkeleton } from "../components/ui/States";
+import { useAnggaran } from "../hooks/useAnggaran";
 import { useAkun } from "../hooks/useMaster";
-import { usePeriodeAktif, type Periode } from "../hooks/usePeriode";
+import { usePeriodeAktif, usePeriodeList, type Periode } from "../hooks/usePeriode";
 import { usePratinjauTutup } from "../hooks/useTabungan";
 import { invalidateKeuangan, type Transaksi } from "../hooks/useTransaksi";
 import { ApiError, api } from "../lib/api";
@@ -21,6 +22,7 @@ import { formatRupiah, formatTanggalPanjang, hariIni, tambahHari } from "../lib/
 interface Hasil {
   periode: Periode;
   setorTabungan: { akunId: string; nominal: number }[];
+  anggaranDisalin: number;
   totalTabungan: number;
 }
 
@@ -59,6 +61,12 @@ export default function PeriodeBaruPage() {
   const [nama, setNama] = useState("");
   const [keterangan, setKeterangan] = useState("");
   const [saldo, setSaldo] = useState<Record<string, number | null>>({});
+  // Anggaran periode terakhir bisa dipakai lagi (default dicentang kalau ada)
+  const periodeList = usePeriodeList();
+  const sebelumnya = aktif.data ?? periodeList.data?.[0];
+  const anggaranLama = useAnggaran(sebelumnya?.id);
+  const [salin, setSalin] = useState(true);
+  const bisaSalin = Boolean(anggaranLama.data?.ada);
 
   const items = Object.entries(saldo)
     .filter(([, v]) => v)
@@ -69,7 +77,7 @@ export default function PeriodeBaruPage() {
     mutationFn: () =>
       api<Hasil>("/periode/mulai", {
         method: "POST",
-        body: JSON.stringify({ nama: nama.trim() || undefined, tanggalMulai: tanggal, keterangan: keterangan.trim() || undefined, saldoAwal: items }),
+        body: JSON.stringify({ nama: nama.trim() || undefined, tanggalMulai: tanggal, keterangan: keterangan.trim() || undefined, saldoAwal: items, salinAnggaran: bisaSalin && salin }),
       }),
     onSuccess: () => invalidateKeuangan(qc),
     // Error per field ada di langkah 1
@@ -98,6 +106,14 @@ export default function PeriodeBaruPage() {
           {h.setorTabungan.length > 0 && (
             <p className="text-sm">
               Masuk tabungan <span className="font-bold text-tabungan">{formatRupiah(h.setorTabungan.reduce((n, s) => n + s.nominal, 0))}</span>
+            </p>
+          )}
+          {h.anggaranDisalin > 0 && (
+            <p className="text-sm">
+              Anggaran disalin dari periode sebelumnya.{" "}
+              <Link to="/anggaran" className="font-semibold text-brand-700 underline">
+                Lihat anggaran
+              </Link>
             </p>
           )}
           <Link to="/" className={`mt-2 inline-flex min-h-11 items-center rounded-xl bg-brand-700 px-4 text-sm font-semibold text-white hover:bg-brand-800 ${fokus}`}>
@@ -239,6 +255,18 @@ export default function PeriodeBaruPage() {
               <p className="text-2xl font-extrabold tabular-nums">{formatRupiah(total)}</p>
             </div>
           </Card>
+
+          {bisaSalin && sebelumnya && (
+            <label className="flex min-h-11 cursor-pointer items-start gap-3 rounded-2xl border border-garis bg-white p-4">
+              <input type="checkbox" checked={salin} onChange={(e) => setSalin(e.target.checked)} className="mt-0.5 size-5 shrink-0 accent-brand-700" />
+              <span className="text-sm">
+                <span className="block font-semibold">Pakai anggaran {sebelumnya.nama}</span>
+                <span className="text-stone-500">
+                  Total {formatRupiah(anggaranLama.data?.total.anggaran ?? 0)}. Hilangkan centang untuk mengisi anggaran baru dari nol.
+                </span>
+              </span>
+            </label>
+          )}
 
           {bentrok.length > 0 && (
             <div role="alert" className="flex flex-col gap-2">

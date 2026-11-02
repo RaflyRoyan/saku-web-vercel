@@ -235,6 +235,20 @@ Kelompok **Lainnya** (`id = "LAINNYA"`) tidak punya baris: selalu ada, selalu te
 | E | saldo | angka | ≥ 0 |
 | F–I | audit | | |
 
+**`Anggaran`** (batas pengeluaran per periode, milik pengguna)
+
+| # | Kolom | Tipe | Aturan |
+|---|---|---|---|
+| A | id | teks | `AG-…` |
+| B | user_id | teks | |
+| C | periode_id | teks | |
+| D | kelompok_id | teks | Batas **kategori induk** (`KelompokKategori` atau `LAINNYA`). Kosong kalau baris ini batas sub kategori |
+| E | kategori_id | teks | Batas **sub kategori** (`Kategori` tipe `keluar`). Kosong kalau baris ini batas kategori induk |
+| F | nominal | angka | > 0 (0 tidak disimpan) |
+| G–J | audit | | |
+
+Tepat satu dari `kelompok_id` / `kategori_id` terisi; unik per (periode_id, kelompok_id) dan (periode_id, kategori_id).
+
 **`Transaksi`**
 
 | # | Kolom | Tipe | Aturan |
@@ -439,6 +453,16 @@ Untuk tanggal acuan `hari` (default hari ini, WIB):
   - Kalau bulan itu sudah dibayar → 409.
 - **Lewati** `POST /api/berulang/{id}/lewati` `{bulan}`. **Batal lewati** `DELETE /api/berulang/{id}/lewati/{bulan}`.
 
+### 7.8 Anggaran
+
+- Anggaran berlaku per periode; sisa yang tidak terpakai **hangus** (tidak dibawa ke periode berikutnya).
+- Batas bisa diisi untuk kategori induk, sub kategori, atau keduanya. Batas kategori induk yang kosong = jumlah batas sub kategorinya.
+- Jumlah batas sub kategori tidak boleh melebihi batas kategori induknya → 400 di `items.{i}.nominal`.
+- **Terpakai** = pengeluaran periode itu: transaksi `keluar` per `kategori_id` + biaya admin transfer (kategori `BIAYA_ADMIN`), sama dengan ringkasan §7.3. Terpakai kategori induk = semua sub kategorinya, termasuk yang tidak dianggarkan.
+- **Status**: `aman` (< 80%), `hampir` (≥ 80% dan ≤ 100%), `lewat` (terpakai > anggaran). Tanpa batas → `anggaran`, `sisa`, `persen`, `status` = null.
+- Transaksi yang melewati anggaran **tidak diblokir**. `POST/PUT /api/transaksi` dan `POST /api/berulang/{id}/konfirmasi` menambah `peringatan[]`: `"Anggaran Kopi terlewati Rp 10.000 (terpakai Rp 60.000 dari Rp 50.000)."` (juga untuk kategori induk).
+- Periode baru: `salinAnggaran: true` di `POST /api/periode/mulai` menyalin anggaran periode sebelumnya (hanya kategori/kelompok yang masih aktif). Default tidak disalin.
+
 ---
 
 ## 8. Akses Google Sheets
@@ -544,10 +568,12 @@ Respons kategori memuat `kelompokId` + `kelompokNama` (pemasukan: `null`).
 | GET | `/api/periode` | | Semua periode, terbaru di atas |
 | GET | `/api/periode/aktif` | | Periode aktif + saldo awal, atau 404 kalau belum ada |
 | GET | `/api/periode/aktif/pratinjau-tutup` | | §7.4 pratinjau |
-| POST | `/api/periode/mulai` | `{ nama?, tanggalMulai?, keterangan?, saldoAwal: [{ akunId, saldo }] }` | §7.4 |
+| POST | `/api/periode/mulai` | `{ nama?, tanggalMulai?, keterangan?, saldoAwal: [{ akunId, saldo }], salinAnggaran? }` | §7.4, §7.8. Response menyertakan `anggaranDisalin` (jumlah baris) |
 | PUT | `/api/periode/{id}` | `{ nama, keterangan }` | Tanggal tidak bisa diubah lewat sini |
 | PUT | `/api/periode/{id}/saldo-awal` | `{ saldoAwal: [{ akunId, saldo }] }` | Ganti seluruh saldo awal periode itu (upsert + hapus yang tidak dikirim). Periode tertutup → hitung ulang tabungan (§7.5) |
 | GET | `/api/periode/{id}/ringkasan` | | §10.9 |
+| GET | `/api/periode/{id}/anggaran` | | §7.8. `{ periodeId, ada, total, kelompok: [{ kelompokId, nama, anggaranSendiri, anggaran, terpakai, sisa, persen, status, sub: [{ kategoriId, nama, anggaran, terpakai, sisa, persen, status }] }] }`. Kategori induk tampil kalau punya batas atau pengeluaran, urut master (Lainnya terakhir) |
+| PUT | `/api/periode/{id}/anggaran` | `{ items: [{ kelompokId? | kategoriId?, nominal }] }` | Ganti seluruh anggaran periode itu (upsert + hapus yang tidak dikirim / 0). Response = hasil GET terbaru |
 
 ### 10.6 Transaksi
 
@@ -608,7 +634,7 @@ Respons kategori memuat `kelompokId` + `kelompokNama` (pemasukan: `null`).
 - `perAkun` berisi semua akun aktif, ditambah akun nonaktif yang punya data di periode itu. Urut `urutan`.
 - `setorTabungan` hanya terisi untuk periode yang sudah tertutup.
 
-`GET /api/dashboard` = ringkasan periode aktif (atau `null`) + `totalTabungan` + `pengingat` (§7.7) + `transaksiTerakhir` (5 item).
+`GET /api/dashboard` = ringkasan periode aktif (atau `null`) + `anggaran` periode aktif (§7.8, atau `null`) + `totalTabungan` + `pengingat` (§7.7) + `transaksiTerakhir` (5 item).
 
 ### 10.10 Health
 

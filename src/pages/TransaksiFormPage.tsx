@@ -10,8 +10,10 @@ import { Input } from "../components/ui/Input";
 import { MoneyInput } from "../components/ui/MoneyInput";
 import { SegmentedControl } from "../components/ui/SegmentedControl";
 import { ErrorState, ListSkeleton } from "../components/ui/States";
+import { InfoAnggaran } from "../components/keuangan/InfoAnggaran";
 import { KategoriBertingkat } from "../components/keuangan/KategoriBertingkat";
 import { akunUntukForm, useAkun, useKategori } from "../hooks/useMaster";
+import { usePeriodeList } from "../hooks/usePeriode";
 import { useToast } from "../hooks/useToast";
 import { invalidateKeuangan, useTransaksi, type TipeTransaksi, type Transaksi, type TransaksiTersimpan } from "../hooks/useTransaksi";
 import { ApiError, send } from "../lib/api";
@@ -108,6 +110,7 @@ function TransaksiForm({ edit }: { edit?: Transaksi }) {
   const [hapus, setHapus] = useState(false);
   const akun = useAkun(true);
   const kategori = useKategori(true);
+  const periodeList = usePeriodeList();
 
   const set = <K extends keyof Form>(key: K, value: Form[K]) => setForm((f) => ({ ...f, [key]: value }));
   const kembali = () => (location.key === "default" ? navigate("/") : navigate(-1));
@@ -170,6 +173,14 @@ function TransaksiForm({ edit }: { edit?: Transaksi }) {
     ) : null;
   };
   const akunOptions = akunAktif.map((a) => ({ value: a.id, label: a.nama }));
+  // Periode yang mencakup tanggal transaksi, untuk sisa anggaran
+  const periodeTanggal = periodeList.data?.find((p) => p.tanggalMulai <= form.tanggal && (!p.tanggalSelesai || form.tanggal <= p.tanggalSelesai))?.id;
+  const kategoriDipilih = kategori.data?.find((k) => k.id === form.kategoriId);
+  // Saat edit, nominal lama sudah terhitung di realisasi: jangan dihitung dua kali
+  const lamaDiPeriode = edit && edit.tipe === "keluar" && edit.periodeId === periodeTanggal;
+  const kelompokLama = kategori.data?.find((k) => k.id === edit?.kategoriId)?.kelompokId;
+  const nominalLama = lamaDiPeriode && edit.kategoriId === form.kategoriId ? edit.nominal : 0;
+  const nominalLamaKelompok = lamaDiPeriode && kelompokLama === kategoriDipilih?.kelompokId ? edit.nominal : 0;
 
   return (
     <form
@@ -257,7 +268,17 @@ function TransaksiForm({ edit }: { edit?: Transaksi }) {
               </div>
             </>
           ) : form.tipe === "keluar" ? (
-            <KategoriBertingkat kategori={kategoriTipe} value={form.kategoriId} onChange={(v) => set("kategoriId", v)} error={fe?.kategoriId} />
+            <>
+              <KategoriBertingkat kategori={kategoriTipe} value={form.kategoriId} onChange={(v) => set("kategoriId", v)} error={fe?.kategoriId} />
+              <InfoAnggaran
+                periodeId={periodeTanggal}
+                kategoriId={form.kategoriId}
+                kelompokId={kategoriDipilih?.kelompokId ?? null}
+                nominal={form.nominal ?? 0}
+                nominalLama={nominalLama}
+                nominalLamaKelompok={nominalLamaKelompok}
+              />
+            </>
           ) : (
             <ChipPicker
               label="Kategori"

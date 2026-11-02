@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import { AlarmClock, ChevronRight, PiggyBank, Receipt, Settings } from "lucide-react";
 import { AkunIcon } from "../components/keuangan/AkunIcon";
+import { KartuAnggaran } from "../components/keuangan/KartuAnggaran";
 import { KomposisiKategori } from "../components/keuangan/KomposisiKategori";
 import { LanggananAksi } from "../components/keuangan/LanggananAksi";
 import { PeriodeKosong } from "../components/keuangan/PeriodeKosong";
@@ -59,7 +60,7 @@ export default function DashboardPage() {
   }
   if (dash.isError) return <ErrorState error={dash.error} onRetry={() => dash.refetch()} />;
 
-  const { pengingat, totalTabungan, transaksiTerakhir } = dash.data;
+  const { pengingat, totalTabungan, transaksiTerakhir, anggaran } = dash.data;
   const kartuTabungan = (
     <Link to="/tabungan" className={`flex items-center gap-3 rounded-2xl border border-yellow-200 bg-yellow-50 p-4 hover:bg-yellow-100 ${fokus}`}>
       <PiggyBank className="size-6 text-tabungan" aria-hidden />
@@ -99,6 +100,8 @@ export default function DashboardPage() {
             </Link>
           </div>
         </div>
+
+        <KartuAnggaran data={anggaran} />
 
         {pengingat.length > 0 && (
           <section aria-labelledby="pengingat">

@@ -4,6 +4,7 @@ import { loadSession, requireAuth } from "../auth/session.js";
 import { nowWibIso } from "../common/clock.js";
 import { jsonBody } from "../common/validation.js";
 import { findOwned, newId, newRow, rowsOf, updatedRow } from "../repositories/rows.js";
+import { peringatanAnggaran } from "../services/anggaran.js";
 import { kelompokIdDari } from "../services/kelompok.js";
 import { periodeAktif } from "../services/saldo.js";
 import { rencanaSetorTerdampak, simpanSetor } from "../services/tabungan.js";
@@ -18,6 +19,8 @@ import {
 import type { SheetData } from "../sheets/store.js";
 
 const SHEETS = ["Akun", "AkunPengguna", "Kategori", "KelompokKategori", "Periode", "SaldoAwal", "Transaksi", "Tabungan"] as const;
+/** POST/PUT juga butuh Anggaran untuk peringatan anggaran terlewati. */
+const SHEETS_TULIS = [...SHEETS, "Anggaran"] as const;
 
 function parseAll(data: Record<(typeof SHEETS)[number], SheetData>) {
   return {
@@ -94,7 +97,7 @@ transaksi.get("/:id", async (c) => {
 
 transaksi.post("/", jsonBody(transaksiBody), async (c) => {
   const body = c.req.valid("json");
-  const { user, data } = await loadSession(c, SHEETS);
+  const { user, data } = await loadSession(c, SHEETS_TULIS);
   const uid = user.data.id;
   const s = parseAll(data);
   const kolom = resolveTransaksi(body, s, uid, c.var.clock);
@@ -109,12 +112,13 @@ transaksi.post("/", jsonBody(transaksiBody), async (c) => {
   await simpanSetor(store, setor);
 
   const dto = transaksiMapper(s.akun, s.kategori)(full);
-  return c.json({ ...dto, peringatan: peringatanSaldo(full, s.saldoAwal, after, s.akun) }, 201);
+  const peringatan = [...peringatanSaldo(full, s.saldoAwal, after, s.akun), ...peringatanAnggaran(full, rowsOf(data, "Anggaran"), s.kategori, s.kelompok, after)];
+  return c.json({ ...dto, peringatan }, 201);
 });
 
 transaksi.put("/:id", jsonBody(transaksiBody), async (c) => {
   const body = c.req.valid("json");
-  const { user, data } = await loadSession(c, SHEETS);
+  const { user, data } = await loadSession(c, SHEETS_TULIS);
   const uid = user.data.id;
   const s = parseAll(data);
   const target = findOwned(s.transaksi, c.req.param("id"), uid);
@@ -130,7 +134,8 @@ transaksi.put("/:id", jsonBody(transaksiBody), async (c) => {
   await simpanSetor(c.var.store(), setor, [{ sheet: "Transaksi", row: target.row, values }]);
 
   const dto = transaksiMapper(s.akun, s.kategori)(full);
-  return c.json({ ...dto, peringatan: peringatanSaldo(full, s.saldoAwal, after, s.akun) });
+  const peringatan = [...peringatanSaldo(full, s.saldoAwal, after, s.akun), ...peringatanAnggaran(full, rowsOf(data, "Anggaran"), s.kategori, s.kelompok, after)];
+  return c.json({ ...dto, peringatan });
 });
 
 transaksi.delete("/:id", async (c) => {

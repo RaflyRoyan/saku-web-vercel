@@ -17,6 +17,7 @@ import {
   type Pengingat,
 } from "../services/berulang.js";
 import { pesanBelumDipilih, pilihanAkun } from "../services/akun-pengguna.js";
+import { peringatanAnggaran } from "../services/anggaran.js";
 import { rencanaSetorTerdampak, simpanSetor } from "../services/tabungan.js";
 import { peringatanSaldo, resolveTransaksi, transaksiMapper } from "../services/transaksi.js";
 import type { SheetData } from "../sheets/store.js";
@@ -227,7 +228,7 @@ berulang.post(
   ),
   async (c) => {
     const body = c.req.valid("json");
-    const { user, data } = await loadSession(c, SHEETS);
+    const { user, data } = await loadSession(c, [...SHEETS, "KelompokKategori", "Anggaran"]);
     const uid = user.data.id;
     const clock = c.var.clock;
     const s = parseAll(data);
@@ -252,7 +253,11 @@ berulang.post(
     await store.append("Transaksi", [newRow("Transaksi", baru, uid, clock)]);
     await simpanSetor(store, setor);
     const dto = transaksiMapper(s.akun, s.kategori)(full);
-    return c.json({ ...dto, peringatan: peringatanSaldo(full, s.saldoAwal, after, s.akun) }, 201);
+    const peringatan = [
+      ...peringatanSaldo(full, s.saldoAwal, after, s.akun),
+      ...peringatanAnggaran(full, rowsOf(data, "Anggaran"), s.kategori, rowsOf(data, "KelompokKategori"), after),
+    ];
+    return c.json({ ...dto, peringatan }, 201);
   },
 );
 

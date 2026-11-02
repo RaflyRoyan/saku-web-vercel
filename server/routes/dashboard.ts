@@ -4,13 +4,14 @@ import { loadSession, requireAuth } from "../auth/session.js";
 import { todayWib } from "../common/clock.js";
 import { rowsOf } from "../repositories/rows.js";
 import { pilihanAkun } from "../services/akun-pengguna.js";
+import { hitungAnggaran } from "../services/anggaran.js";
 import { hitungRingkasan } from "../services/ringkasan.js";
 import { periodeAktif } from "../services/saldo.js";
 import { totalTabungan } from "../services/tabungan.js";
 import { transaksiMapper, urutTransaksi } from "../services/transaksi.js";
 import { pengingatDto } from "./berulang.js";
 
-const SHEETS = ["Akun", "AkunPengguna", "Kategori", "KelompokKategori", "Periode", "SaldoAwal", "Transaksi", "Tabungan", "Berulang", "BerulangLewati"] as const;
+const SHEETS = ["Akun", "AkunPengguna", "Kategori", "KelompokKategori", "Periode", "SaldoAwal", "Transaksi", "Tabungan", "Berulang", "BerulangLewati", "Anggaran"] as const;
 
 export const dashboard = new Hono<AppEnv>();
 
@@ -38,6 +39,7 @@ dashboard.get("/", async (c) => {
     ringkasan: aktif
       ? hitungRingkasan(aktif.data, s.akun, s.kategori, s.saldoAwal, s.transaksi, s.tabungan, pilihanAkun(s.akunPengguna, uid), rowsOf(data, "KelompokKategori"))
       : null,
+    anggaran: aktif ? hitungAnggaran(aktif.data.id, uid, rowsOf(data, "Anggaran"), s.kategori, rowsOf(data, "KelompokKategori"), s.transaksi) : null,
     totalTabungan: totalTabungan(s.tabungan, uid),
     pengingat: pengingatDto(s, uid, todayWib(c.var.clock)),
     transaksiTerakhir: aktif

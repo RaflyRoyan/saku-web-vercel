@@ -79,6 +79,16 @@ export const SCHEMA = {
     ["saldo", "angka"],
     ...AUDIT,
   ],
+  // Anggaran per periode milik pengguna. Satu baris = satu batas: kelompok_id (kategori induk) ATAU kategori_id (sub kategori).
+  Anggaran: [
+    ["id", "teks"],
+    ["user_id", "teks"],
+    ["periode_id", "teks"],
+    ["kelompok_id", "teks"],
+    ["kategori_id", "teks"],
+    ["nominal", "angka"],
+    ...AUDIT,
+  ],
   Transaksi: [
     ["id", "teks"],
     ["user_id", "teks"],
@@ -141,6 +151,7 @@ export const ID_PREFIX = {
   Kategori: "KT",
   Periode: "PR",
   SaldoAwal: "SA",
+  Anggaran: "AG",
   Transaksi: "TR",
   Berulang: "RB",
   BerulangLewati: "RL",

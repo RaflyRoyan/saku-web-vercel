@@ -23,7 +23,8 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   const show = useCallback((message: string, kind: ToastKind = "sukses") => {
     const id = nextId.current++;
     setItems((list) => [...list, { id, kind, message }]);
-    setTimeout(() => setItems((list) => list.filter((t) => t.id !== id)), 4000);
+    // Peringatan (saldo minus, anggaran terlewati) tampil lebih lama supaya sempat dibaca
+    setTimeout(() => setItems((list) => list.filter((t) => t.id !== id)), kind === "peringatan" ? 8000 : 4000);
   }, []);
 
   const value = useMemo(() => ({ show }), [show]);

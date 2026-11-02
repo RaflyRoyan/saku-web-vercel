@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../lib/api";
+import type { AnggaranPeriode } from "./useAnggaran";
 import type { Ringkasan } from "./usePeriode";
 import type { Transaksi } from "./useTransaksi";
 
@@ -35,6 +36,8 @@ export interface Pengingat {
 
 export interface Dashboard {
   ringkasan: Ringkasan | null;
+  /** Anggaran periode aktif (null kalau belum ada periode). */
+  anggaran: AnggaranPeriode | null;
   totalTabungan: number;
   pengingat: Pengingat[];
   transaksiTerakhir: Transaksi[];
