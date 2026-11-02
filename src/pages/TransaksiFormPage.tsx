@@ -10,6 +10,7 @@ import { Input } from "../components/ui/Input";
 import { MoneyInput } from "../components/ui/MoneyInput";
 import { SegmentedControl } from "../components/ui/SegmentedControl";
 import { ErrorState, ListSkeleton } from "../components/ui/States";
+import { KategoriBertingkat } from "../components/keuangan/KategoriBertingkat";
 import { akunUntukForm, useAkun, useKategori } from "../hooks/useMaster";
 import { useToast } from "../hooks/useToast";
 import { invalidateKeuangan, useTransaksi, type TipeTransaksi, type Transaksi, type TransaksiTersimpan } from "../hooks/useTransaksi";
@@ -255,6 +256,8 @@ function TransaksiForm({ edit }: { edit?: Transaksi }) {
                 </div>
               </div>
             </>
+          ) : form.tipe === "keluar" ? (
+            <KategoriBertingkat kategori={kategoriTipe} value={form.kategoriId} onChange={(v) => set("kategoriId", v)} error={fe?.kategoriId} />
           ) : (
             <ChipPicker
               label="Kategori"

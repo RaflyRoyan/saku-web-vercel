@@ -4,6 +4,7 @@ import { loadSession, requireAuth } from "../auth/session.js";
 import { nowWibIso } from "../common/clock.js";
 import { jsonBody } from "../common/validation.js";
 import { findOwned, newId, newRow, rowsOf, updatedRow } from "../repositories/rows.js";
+import { kelompokIdDari } from "../services/kelompok.js";
 import { periodeAktif } from "../services/saldo.js";
 import { rencanaSetorTerdampak, simpanSetor } from "../services/tabungan.js";
 import {
@@ -16,13 +17,14 @@ import {
 } from "../services/transaksi.js";
 import type { SheetData } from "../sheets/store.js";
 
-const SHEETS = ["Akun", "AkunPengguna", "Kategori", "Periode", "SaldoAwal", "Transaksi", "Tabungan"] as const;
+const SHEETS = ["Akun", "AkunPengguna", "Kategori", "KelompokKategori", "Periode", "SaldoAwal", "Transaksi", "Tabungan"] as const;
 
 function parseAll(data: Record<(typeof SHEETS)[number], SheetData>) {
   return {
     akun: rowsOf(data, "Akun"),
     akunPengguna: rowsOf(data, "AkunPengguna"),
     kategori: rowsOf(data, "Kategori"),
+    kelompok: rowsOf(data, "KelompokKategori"),
     periode: rowsOf(data, "Periode"),
     saldoAwal: rowsOf(data, "SaldoAwal"),
     transaksi: rowsOf(data, "Transaksi"),
@@ -50,6 +52,10 @@ transaksi.get("/", async (c) => {
 
   const biayaAdminId = s.kategori.find((k) => k.data.kode_sistem === "BIAYA_ADMIN")?.data.id;
   const cari = q.q?.trim().toLowerCase();
+  // Filter kategori induk = semua sub kategorinya; biaya admin transfer ikut kelompok kategori BIAYA_ADMIN
+  const subKelompok = q.kelompokId
+    ? new Set(s.kategori.filter((k) => kelompokIdDari(k.data, s.kelompok) === q.kelompokId).map((k) => k.data.id))
+    : null;
   const list = s.transaksi
     .map((r) => r.data)
     .filter(
@@ -63,6 +69,9 @@ transaksi.get("/", async (c) => {
         (!q.kategoriId ||
           t.kategori_id === q.kategoriId ||
           (q.kategoriId === biayaAdminId && t.tipe === "transfer" && (t.biaya_admin ?? 0) > 0)) &&
+        (!subKelompok ||
+          subKelompok.has(t.kategori_id) ||
+          (biayaAdminId !== undefined && subKelompok.has(biayaAdminId) && t.tipe === "transfer" && (t.biaya_admin ?? 0) > 0)) &&
         (!cari || t.deskripsi.toLowerCase().includes(cari)) &&
         (!q.dari || (t.tanggal ?? "") >= q.dari) &&
         (!q.sampai || (t.tanggal ?? "") <= q.sampai),

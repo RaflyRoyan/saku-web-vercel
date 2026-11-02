@@ -1,8 +1,9 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
+import { ChevronDown } from "lucide-react";
 import { ArcElement, Chart as ChartJS, Tooltip } from "chart.js";
 import { Doughnut } from "react-chartjs-2";
-import type { PerKategori } from "../../hooks/usePeriode";
+import type { PerKelompok } from "../../hooks/usePeriode";
 import { formatRupiah, formatRupiahRingkas } from "../../lib/format";
 import { fokus } from "../ui/Button";
 import { SegmentedControl } from "../ui/SegmentedControl";
@@ -23,21 +24,35 @@ function tampilanAwal(): Tampilan {
 // Slot kategorikal berurutan (divalidasi: CVD & normal-vision lulus di permukaan putih).
 // Kontras < 3:1 untuk beberapa slot → nama, nominal, dan persen selalu tampil sebagai teks.
 const WARNA = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4"];
-const LAINNYA = "#a8a29e";
+const SISA = "#a8a29e";
 
 /**
- * Pengeluaran per kategori: maks 5 teratas + "Lainnya" (02 §6.2). Bisa ditampilkan sebagai donut atau
- * bar tersegmentasi (pilihan diingat per browser); legenda berisi nama, nominal, dan persen. Tap kategori → Riwayat terfilter.
+ * Pengeluaran per kategori induk: maks 5 teratas + "Kategori lain" (02 §6.2). Bisa ditampilkan sebagai donut atau
+ * bar tersegmentasi (pilihan diingat per browser); legenda berisi nama, nominal, dan persen.
+ * Tap kategori → rincian sub kategori (masing-masing → Riwayat terfilter).
  */
-export function KomposisiKategori({ items, periodeId }: { items: PerKategori[]; periodeId: string }) {
+export function KomposisiKategori({ items, periodeId }: { items: PerKelompok[]; periodeId: string }) {
   const [tampilan, setTampilan] = useState<Tampilan>(tampilanAwal);
+  const [buka, setBuka] = useState<string | null>(null);
   const total = items.reduce((n, k) => n + k.total, 0);
   if (total <= 0) return <p className="text-sm text-stone-500">Belum ada pengeluaran di periode ini.</p>;
 
   const top = items.slice(0, 5).map((k, i) => ({ ...k, warna: WARNA[i] }));
   const sisa = items.slice(5);
-  const bagian: (PerKategori & { warna: string; lainnya?: boolean })[] = sisa.length
-    ? [...top, { kategoriId: "", nama: "Lainnya", total: sisa.reduce((n, k) => n + k.total, 0), jumlah: sisa.reduce((n, k) => n + k.jumlah, 0), warna: LAINNYA, lainnya: true }]
+  // Kategori di luar 5 teratas digabung; rinciannya berisi kategori induk tersebut
+  const bagian: (PerKelompok & { warna: string; gabungan?: boolean })[] = sisa.length
+    ? [
+        ...top,
+        {
+          kelompokId: "",
+          nama: "Kategori lain",
+          total: sisa.reduce((n, k) => n + k.total, 0),
+          jumlah: sisa.reduce((n, k) => n + k.jumlah, 0),
+          sub: sisa.map((k) => ({ kategoriId: "", nama: k.nama, total: k.total, jumlah: k.jumlah })),
+          warna: SISA,
+          gabungan: true,
+        },
+      ]
     : top;
   const persen = (n: number) => Math.round((n / total) * 100);
   const ringkas = bagian.map((b) => `${b.nama} ${persen(b.total)}%`).join(", ");
@@ -92,23 +107,57 @@ export function KomposisiKategori({ items, periodeId }: { items: PerKategori[]; 
       )}
       <ul className="flex flex-col">
         {bagian.map((b) => {
-          const isi = (
-            <>
-              <span aria-hidden className="size-3 shrink-0 rounded-sm" style={{ backgroundColor: b.warna }} />
-              <span className="min-w-0 flex-1 truncate font-medium text-stone-700">{b.nama}</span>
-              <span className="tabular-nums text-stone-900">{formatRupiah(b.total)}</span>
-              <span className="w-10 text-right text-sm tabular-nums text-stone-500">{persen(b.total)}%</span>
-            </>
-          );
-          const cls = "flex min-h-11 items-center gap-3 rounded-xl px-2 text-sm";
+          const terbuka = buka === b.nama;
+          const idRincian = `rincian-${b.kelompokId || "lain"}`;
           return (
             <li key={b.nama}>
-              {b.lainnya ? (
-                <div className={cls}>{isi}</div>
-              ) : (
-                <Link to={`/riwayat?periode=${periodeId}&kategoriId=${b.kategoriId}`} className={`${cls} hover:bg-brand-50 ${fokus}`}>
-                  {isi}
-                </Link>
+              <button
+                type="button"
+                aria-expanded={terbuka}
+                aria-controls={idRincian}
+                onClick={() => setBuka(terbuka ? null : b.nama)}
+                className={`flex min-h-11 w-full items-center gap-3 rounded-xl px-2 text-left text-sm hover:bg-brand-50 ${fokus}`}
+              >
+                <span aria-hidden className="size-3 shrink-0 rounded-sm" style={{ backgroundColor: b.warna }} />
+                <span className="min-w-0 flex-1 truncate font-medium text-stone-700">{b.nama}</span>
+                <span className="tabular-nums text-stone-900">{formatRupiah(b.total)}</span>
+                <span className="w-10 text-right text-sm tabular-nums text-stone-500">{persen(b.total)}%</span>
+                <ChevronDown aria-hidden className={`size-4 shrink-0 text-stone-400 transition-transform ${terbuka ? "rotate-180" : ""}`} />
+              </button>
+              {terbuka && (
+                <ul id={idRincian} className="mb-1 ml-5 flex flex-col border-l border-garis pl-3">
+                  {b.sub.map((k) => {
+                    const isi = (
+                      <>
+                        <span className="min-w-0 flex-1 truncate text-stone-600">{k.nama}</span>
+                        <span className="tabular-nums text-stone-700">{formatRupiah(k.total)}</span>
+                        <span className="w-10 text-right tabular-nums text-stone-500">{persen(k.total)}%</span>
+                      </>
+                    );
+                    const cls = "flex min-h-10 items-center gap-3 rounded-lg px-2 text-sm";
+                    return (
+                      <li key={k.kategoriId || k.nama}>
+                        {k.kategoriId ? (
+                          <Link to={`/riwayat?periode=${periodeId}&kategoriId=${k.kategoriId}`} className={`${cls} hover:bg-brand-50 ${fokus}`}>
+                            {isi}
+                          </Link>
+                        ) : (
+                          <div className={cls}>{isi}</div>
+                        )}
+                      </li>
+                    );
+                  })}
+                  {!b.gabungan && (
+                    <li>
+                      <Link
+                        to={`/riwayat?periode=${periodeId}&kelompokId=${b.kelompokId}`}
+                        className={`flex min-h-10 items-center rounded-lg px-2 text-sm font-semibold text-brand-700 hover:bg-brand-50 ${fokus}`}
+                      >
+                        Lihat semua transaksi {b.nama}
+                      </Link>
+                    </li>
+                  )}
+                </ul>
               )}
             </li>
           );

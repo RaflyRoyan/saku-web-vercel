@@ -11,6 +11,7 @@ import { berulang } from "./routes/berulang.js";
 import { dashboard } from "./routes/dashboard.js";
 import { health } from "./routes/health.js";
 import { kategori } from "./routes/kategori.js";
+import { kelompokKategori } from "./routes/kelompok-kategori.js";
 import { pengguna } from "./routes/pengguna.js";
 import { periode } from "./routes/periode.js";
 import { tabungan } from "./routes/tabungan.js";
@@ -59,6 +60,7 @@ export function createApp(deps: Partial<AppDeps> = {}) {
   app.route("/pengguna", pengguna);
   app.route("/akun", akun);
   app.route("/kategori", kategori);
+  app.route("/kelompok-kategori", kelompokKategori);
   app.route("/periode", periode);
   app.route("/transaksi", transaksi);
   app.route("/tabungan", tabungan);

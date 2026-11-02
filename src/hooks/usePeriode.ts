@@ -21,6 +21,15 @@ export interface PerKategori {
   jumlah: number;
 }
 
+/** Pengeluaran per kategori induk (KelompokKategori) dengan rincian per sub kategori. */
+export interface PerKelompok {
+  kelompokId: string;
+  nama: string;
+  total: number;
+  jumlah: number;
+  sub: PerKategori[];
+}
+
 export interface RingkasanAkun {
   akunId: string;
   nama: string;
@@ -35,6 +44,7 @@ export interface RingkasanAkun {
   saldoAkhir: number;
   jumlahTransaksi: number;
   pengeluaranPerKategori: PerKategori[];
+  pengeluaranPerKelompok: PerKelompok[];
 }
 
 export interface Ringkasan {
@@ -45,6 +55,7 @@ export interface Ringkasan {
   totalSaldoAkhir: number;
   perAkun: RingkasanAkun[];
   pengeluaranPerKategori: PerKategori[];
+  pengeluaranPerKelompok: PerKelompok[];
   pemasukanPerKategori: PerKategori[];
   setorTabungan: { akunId: string; nominal: number }[];
 }

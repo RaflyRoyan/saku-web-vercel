@@ -30,13 +30,37 @@ export interface Kategori {
   tipe: TipeKategori;
   kodeSistem: "BIAYA_ADMIN" | "TARIK_TABUNGAN" | null;
   aktif: boolean;
+  /** Kategori induk; hanya pengeluaran (pemasukan = null). Tanpa induk = "LAINNYA". */
+  kelompokId: string | null;
+  kelompokNama: string | null;
 }
+
+/** Kategori induk pengeluaran (sheet KelompokKategori). Di UI disebut "Kategori"; Kategori lama = "Sub kategori". */
+export interface KelompokKategori {
+  id: string;
+  nama: string;
+  urutan: number;
+  aktif: boolean;
+  /** "Lainnya": selalu ada & terakhir, tidak bisa diubah. */
+  sistem: boolean;
+}
+
+export const LAINNYA = "LAINNYA";
 
 export const masterKeys = {
   akun: ["akun"] as const,
   pilihanAkun: ["akun", "pilihan"] as const,
   kategori: ["kategori"] as const,
+  kelompok: ["kelompok-kategori"] as const,
 };
+
+/** Default: hanya aktif. Urut `urutan`, "Lainnya" terakhir. */
+export function useKelompokKategori(termasukNonaktif = false) {
+  return useQuery({
+    queryKey: [...masterKeys.kelompok, { termasukNonaktif }],
+    queryFn: () => api<KelompokKategori[]>(`/kelompok-kategori?termasukNonaktif=${termasukNonaktif}`),
+  });
+}
 
 /**
  * `false` (default): hanya akun aktif yang dipilih pengguna, urut pengguna.

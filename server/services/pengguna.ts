@@ -106,7 +106,7 @@ export async function ensureKategoriSistem(
     }
     const id = newId("Kategori", used);
     used.push({ row: 0, data: { id } as Baris<"Kategori"> });
-    append.push(newRow("Kategori", { id, nama: sys.nama, tipe: sys.tipe, kode_sistem: sys.kode, aktif: true }, by, clock));
+    append.push(newRow("Kategori", { id, nama: sys.nama, tipe: sys.tipe, kode_sistem: sys.kode, aktif: true, kelompok_id: "" }, by, clock));
   }
 
   if (updates.length) await store.updateRows(updates);

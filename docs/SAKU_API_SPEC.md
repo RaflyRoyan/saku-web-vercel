@@ -185,6 +185,19 @@ Aplikasi **gagal start** dengan pesan jelas kalau env wajib kosong.
 | E | kode_sistem | teks | kosong, `BIAYA_ADMIN` (keluar), atau `TARIK_TABUNGAN` (masuk). **Kategori sistem tidak bisa dinonaktifkan, diganti tipenya, atau dibuat manual.** |
 | F | aktif | boolean | |
 | G–J | audit | | |
+| J | kelompok_id | teks | ID `KelompokKategori`. Hanya tipe `keluar`; kosong = kelompok **Lainnya**. Ditaruh setelah audit supaya kolom lama tidak bergeser |
+
+**`KelompokKategori`** (kategori induk pengeluaran; di UI disebut "Kategori", dan `Kategori` keluar disebut "Sub kategori")
+
+| # | Kolom | Tipe | Aturan |
+|---|---|---|---|
+| A | id | teks | `KK-…` |
+| B | nama | teks | 1–40 karakter, unik di antara kelompok aktif. "Lainnya" dicadangkan |
+| C | urutan | angka | default = max + 1 |
+| D | aktif | boolean | |
+| E–H | audit | | |
+
+Kelompok **Lainnya** (`id = "LAINNYA"`) tidak punya baris: selalu ada, selalu terakhir, tidak bisa diubah. Saat setup awal dibuat kelompok bawaan: Kebutuhan Harian, Tempat Tinggal, Transportasi, Tagihan & Langganan, Kesehatan, Belanja & Gaya Hidup, Hiburan & Liburan, Pendidikan, Sosial & Keluarga, Keuangan.
 
 **`KategoriDefault`** (tidak per-user, read-only bagi API)
 
@@ -505,9 +518,24 @@ Semua endpoint di bawah `/api` wajib token, kecuali yang ditandai 🔓.
 | Method | Path | Body / Query | Keterangan |
 |---|---|---|---|
 | GET | `/api/kategori?tipe=keluar&untukInput=true&termasukNonaktif=false` | | `untukInput=true` menyembunyikan TARIK_TABUNGAN dan BIAYA_ADMIN |
-| POST | `/api/kategori` | `{ nama, tipe }` | |
-| PUT | `/api/kategori/{id}` | `{ nama }` | Tipe tidak bisa diubah |
+| POST | `/api/kategori` | `{ nama, tipe, kelompokId? }` | `kelompokId` hanya untuk `keluar` (kosong/`LAINNYA` = Lainnya); kelompok harus aktif |
+| PUT | `/api/kategori/{id}` | `{ nama, kelompokId? }` | Tipe tidak bisa diubah. `kelompokId` tidak dikirim = tidak berubah |
 | PUT | `/api/kategori/{id}/aktif` | `{ aktif }` | Kategori sistem → 409 |
+
+Respons kategori memuat `kelompokId` + `kelompokNama` (pemasukan: `null`).
+
+**Kelompok kategori** (admin menulis, semua pengguna membaca)
+
+| Method | Path | Body / Query | Keterangan |
+|---|---|---|---|
+| GET | `/api/kelompok-kategori?termasukNonaktif=false` | | Urut `urutan`, "Lainnya" (`sistem: true`) terakhir |
+| POST | `/api/kelompok-kategori` | `{ nama }` | |
+| POST | `/api/kelompok-kategori/bawaan` | | Tambah kelompok bawaan yang belum ada → `{ ditambah }`. Idempoten |
+| PUT | `/api/kelompok-kategori/urutan` | `{ ids: [...] }` | "Lainnya" diabaikan |
+| PUT | `/api/kelompok-kategori/{id}` | `{ nama }` | |
+| PUT | `/api/kelompok-kategori/{id}/aktif` | `{ aktif }` | Nonaktif ditolak (409) kalau masih ada sub kategori aktif |
+
+`GET /api/transaksi` menerima `kelompokId` (semua sub kategori di kelompok itu). Ringkasan menambah `pengeluaranPerKelompok` (total + `jumlah` + `sub` per sub kategori), di level periode dan per akun.
 
 ### 10.5 Periode
 

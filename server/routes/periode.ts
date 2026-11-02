@@ -252,7 +252,7 @@ periode.put("/:id/saldo-awal", jsonBody(z.object({ saldoAwal: saldoAwalSchema })
 });
 
 periode.get("/:id/ringkasan", async (c) => {
-  const { user, data } = await loadSession(c, ["Akun", "AkunPengguna", "Kategori", "Periode", "SaldoAwal", "Transaksi", "Tabungan"]);
+  const { user, data } = await loadSession(c, ["Akun", "AkunPengguna", "Kategori", "KelompokKategori", "Periode", "SaldoAwal", "Transaksi", "Tabungan"]);
   const target = findOwned(rowsOf(data, "Periode"), c.req.param("id"), user.data.id);
   return c.json(
     hitungRingkasan(
@@ -263,6 +263,7 @@ periode.get("/:id/ringkasan", async (c) => {
       rowsOf(data, "Transaksi"),
       rowsOf(data, "Tabungan"),
       pilihanAkun(rowsOf(data, "AkunPengguna"), user.data.id),
+      rowsOf(data, "KelompokKategori"),
     ),
   );
 });

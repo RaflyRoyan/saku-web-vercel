@@ -10,7 +10,7 @@ import { totalTabungan } from "../services/tabungan.js";
 import { transaksiMapper, urutTransaksi } from "../services/transaksi.js";
 import { pengingatDto } from "./berulang.js";
 
-const SHEETS = ["Akun", "AkunPengguna", "Kategori", "Periode", "SaldoAwal", "Transaksi", "Tabungan", "Berulang", "BerulangLewati"] as const;
+const SHEETS = ["Akun", "AkunPengguna", "Kategori", "KelompokKategori", "Periode", "SaldoAwal", "Transaksi", "Tabungan", "Berulang", "BerulangLewati"] as const;
 
 export const dashboard = new Hono<AppEnv>();
 
@@ -36,7 +36,7 @@ dashboard.get("/", async (c) => {
 
   return c.json({
     ringkasan: aktif
-      ? hitungRingkasan(aktif.data, s.akun, s.kategori, s.saldoAwal, s.transaksi, s.tabungan, pilihanAkun(s.akunPengguna, uid))
+      ? hitungRingkasan(aktif.data, s.akun, s.kategori, s.saldoAwal, s.transaksi, s.tabungan, pilihanAkun(s.akunPengguna, uid), rowsOf(data, "KelompokKategori"))
       : null,
     totalTabungan: totalTabungan(s.tabungan, uid),
     pengingat: pengingatDto(s, uid, todayWib(c.var.clock)),

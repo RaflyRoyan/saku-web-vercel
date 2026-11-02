@@ -31,6 +31,8 @@ export interface FilterTransaksi {
   akunId?: string;
   tipe?: string;
   kategoriId?: string;
+  /** Kategori induk pengeluaran ("LAINNYA" untuk Lainnya). */
+  kelompokId?: string;
   q?: string;
 }
 

@@ -1,6 +1,7 @@
 import type { ParsedRow } from "../repositories/rows.js";
 import type { PilihanAkun } from "./akun-pengguna.js";
 import { periodeDto, type PeriodeDto } from "./periode.js";
+import { perKelompok, type PerKelompok } from "./kelompok.js";
 
 export interface PerKategori {
   kategoriId: string;
@@ -23,6 +24,7 @@ export interface RingkasanAkun {
   saldoAkhir: number;
   jumlahTransaksi: number;
   pengeluaranPerKategori: PerKategori[];
+  pengeluaranPerKelompok: PerKelompok[];
 }
 
 export interface Ringkasan {
@@ -33,6 +35,7 @@ export interface Ringkasan {
   totalSaldoAkhir: number;
   perAkun: RingkasanAkun[];
   pengeluaranPerKategori: PerKategori[];
+  pengeluaranPerKelompok: PerKelompok[];
   pemasukanPerKategori: PerKategori[];
   setorTabungan: { akunId: string; nominal: number }[];
 }
@@ -66,6 +69,7 @@ export function hitungRingkasan(
   transaksi: ParsedRow<"Transaksi">[],
   tabungan: ParsedRow<"Tabungan">[],
   pilihan: PilihanAkun,
+  kelompok: ParsedRow<"KelompokKategori">[],
 ): Ringkasan {
   const namaKategori = new Map(kategori.map((k) => [k.data.id, k.data.nama]));
   const biayaAdminKat = kategori.find((k) => k.data.kode_sistem === "BIAYA_ADMIN")?.data;
@@ -90,6 +94,7 @@ export function hitungRingkasan(
         saldoAkhir: 0,
         jumlahTransaksi: 0,
         pengeluaranPerKategori: [],
+        pengeluaranPerKelompok: [],
         kat: kategoriCounter(nama),
       };
       perAkun.set(akunId, a);
@@ -144,6 +149,7 @@ export function hitungRingkasan(
     r.aktif = a.aktif;
     r.saldoAkhir = r.saldoAwal + r.masuk - r.keluar - r.biayaAdmin + r.transferMasuk - r.transferKeluar;
     r.pengeluaranPerKategori = kat.list();
+    r.pengeluaranPerKelompok = perKelompok(r.pengeluaranPerKategori, kategori, kelompok);
     daftar.push(r);
   }
 
@@ -156,6 +162,7 @@ export function hitungRingkasan(
     totalSaldoAkhir: sum((a) => a.saldoAkhir),
     perAkun: daftar,
     pengeluaranPerKategori: pengeluaran.list(),
+    pengeluaranPerKelompok: perKelompok(pengeluaran.list(), kategori, kelompok),
     pemasukanPerKategori: pemasukan.list(),
     setorTabungan: periode.tanggal_selesai
       ? tabungan

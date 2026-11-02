@@ -43,6 +43,15 @@ export const SCHEMA = {
     ["urutan", "angka"],
     ...AUDIT,
   ],
+  // Kelompok di atas kategori pengeluaran (UI: "Kategori"; sheet Kategori tampil sebagai "Sub kategori").
+  // Kelompok "Lainnya" tidak punya baris: kategori keluar dengan kelompok_id kosong masuk ke sana.
+  KelompokKategori: [
+    ["id", "teks"],
+    ["nama", "teks"],
+    ["urutan", "angka"],
+    ["aktif", "boolean"],
+    ...AUDIT,
+  ],
   Kategori: [
     ["id", "teks"],
     ["nama", "teks"],
@@ -50,6 +59,8 @@ export const SCHEMA = {
     ["kode_sistem", "teks"],
     ["aktif", "boolean"],
     ...AUDIT,
+    // Ditambahkan setelah audit supaya kolom data lama tidak bergeser. Hanya untuk tipe keluar.
+    ["kelompok_id", "teks"],
   ],
   Periode: [
     ["id", "teks"],
@@ -126,6 +137,7 @@ export const ID_PREFIX = {
   Pengguna: "US",
   Akun: "AK",
   AkunPengguna: "AP",
+  KelompokKategori: "KK",
   Kategori: "KT",
   Periode: "PR",
   SaldoAwal: "SA",

@@ -8,7 +8,7 @@ import { BottomSheet } from "../components/ui/BottomSheet";
 import { Button, fokus } from "../components/ui/Button";
 import { Input } from "../components/ui/Input";
 import { EmptyState, ErrorState, ListSkeleton } from "../components/ui/States";
-import { useAkun, useKategori } from "../hooks/useMaster";
+import { useAkun, useKategori, useKelompokKategori } from "../hooks/useMaster";
 import { usePeriodeList, usePeriodeTerpilih } from "../hooks/usePeriode";
 import { useTransaksiList } from "../hooks/useTransaksi";
 import { formatTanggal } from "../lib/format";
@@ -139,6 +139,7 @@ export default function RiwayatPage() {
   const periodeList = usePeriodeList();
   const akun = useAkun(true);
   const kategori = useKategori(true);
+  const kelompok = useKelompokKategori(true);
   const [cari, setCari] = useState(params.get("q") ?? "");
   const q = useDebounced(cari.trim(), 300);
 
@@ -147,6 +148,7 @@ export default function RiwayatPage() {
     akunId: params.get("akunId") ?? "",
     tipe: params.get("tipe") ?? "",
     kategoriId: params.get("kategoriId") ?? "",
+    kelompokId: params.get("kelompokId") ?? "",
     dari: params.get("dari") ?? "",
     sampai: params.get("sampai") ?? "",
     q,
@@ -197,7 +199,7 @@ export default function RiwayatPage() {
   else if (list.isError) isi = <ErrorState error={list.error} onRetry={() => list.refetch()} />;
   else {
     const items = list.data!.pages.flatMap((p) => p.data);
-    const adaFilter = filter.akunId || filter.tipe || filter.kategoriId || filter.dari || filter.sampai || q;
+    const adaFilter = filter.akunId || filter.tipe || filter.kategoriId || filter.kelompokId || filter.dari || filter.sampai || q;
     isi =
       items.length === 0 ? (
         <EmptyState icon={History} title={adaFilter ? "Tidak ada transaksi yang cocok." : periodeId === SEMUA ? "Belum ada transaksi." : "Belum ada transaksi di periode ini."} />
@@ -216,7 +218,24 @@ export default function RiwayatPage() {
   const kategoriOptions = (kategori.data ?? [])
     // Transfer hanya punya "kategori" biaya admin
     .filter((k) => (filter.tipe === "transfer" ? k.kodeSistem === "BIAYA_ADMIN" : !filter.tipe || k.tipe === filter.tipe))
+    // Sub kategori dibatasi ke kategori induk yang dipilih
+    .filter((k) => !filter.kelompokId || k.kelompokId === filter.kelompokId)
     .map((k) => ({ value: k.id, label: k.nama }));
+  // Kategori induk hanya ada di pengeluaran
+  const pakaiInduk = !filter.tipe || filter.tipe === "keluar";
+  const kelompokOptions = (kelompok.data ?? []).map((g) => ({ value: g.id, label: g.nama }));
+  const setKelompok = (v: string) =>
+    setParams(
+      (p) => {
+        const next = new URLSearchParams(p);
+        if (v) next.set("kelompokId", v);
+        else next.delete("kelompokId");
+        // Sub kategori lama mungkin tidak ada di induk baru
+        next.delete("kategoriId");
+        return next;
+      },
+      { replace: true },
+    );
 
   return (
     <>
@@ -253,7 +272,13 @@ export default function RiwayatPage() {
             onChange={(v) => setFilter("akunId", v)}
           />
           <FilterChip label="Tipe" value={filter.tipe} options={TIPE} onChange={(v) => setFilter("tipe", v)} />
-          <FilterChip label="Kategori" value={filter.kategoriId} options={kategoriOptions} onChange={(v) => setFilter("kategoriId", v)} />
+          {pakaiInduk && <FilterChip label="Kategori" value={filter.kelompokId} options={kelompokOptions} onChange={setKelompok} />}
+          <FilterChip
+            label={filter.tipe === "masuk" ? "Kategori" : "Sub kategori"}
+            value={filter.kategoriId}
+            options={kategoriOptions}
+            onChange={(v) => setFilter("kategoriId", v)}
+          />
           <TanggalChip dari={filter.dari} sampai={filter.sampai} onOpen={() => setPilihTanggal(true)} onClear={() => setRentang("", "")} />
         </div>
       </div>

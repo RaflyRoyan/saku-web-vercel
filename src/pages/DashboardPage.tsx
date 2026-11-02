@@ -159,7 +159,7 @@ export default function DashboardPage() {
         <section>
           <h2 className="mb-2 font-bold">Pengeluaran per kategori</h2>
           <Card className="p-4">
-            <KomposisiKategori items={r.pengeluaranPerKategori} periodeId={r.periode.id} />
+            <KomposisiKategori items={r.pengeluaranPerKelompok} periodeId={r.periode.id} />
           </Card>
         </section>
 

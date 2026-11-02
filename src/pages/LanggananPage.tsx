@@ -12,6 +12,7 @@ import { Input, Switch } from "../components/ui/Input";
 import { MoneyInput } from "../components/ui/MoneyInput";
 import { EmptyState, ErrorState, ListSkeleton } from "../components/ui/States";
 import { useBerulang, type Berulang } from "../hooks/useBerulang";
+import { KategoriBertingkat } from "../components/keuangan/KategoriBertingkat";
 import { akunUntukForm, useAkun, useKategori } from "../hooks/useMaster";
 import { useToast } from "../hooks/useToast";
 import { invalidateKeuangan } from "../hooks/useTransaksi";
@@ -76,9 +77,7 @@ function LanggananForm({ edit, onDone }: { edit?: Berulang; onDone: () => void }
   });
   const fe = simpan.error instanceof ApiError ? simpan.error.errors : undefined;
   const akunOpt = akunUntukForm(akun.data ?? [], [edit?.akunId]).map((a) => ({ value: a.id, label: a.nama }));
-  const katOpt = (kategori.data ?? [])
-    .filter((k) => k.tipe === "keluar" && !k.kodeSistem && (k.aktif || k.id === edit?.kategoriId))
-    .map((k) => ({ value: k.id, label: k.nama }));
+  const katKeluar = (kategori.data ?? []).filter((k) => k.tipe === "keluar" && !k.kodeSistem && (k.aktif || k.id === edit?.kategoriId));
 
   return (
     <form
@@ -92,7 +91,8 @@ function LanggananForm({ edit, onDone }: { edit?: Berulang; onDone: () => void }
       <Input label="Nama" value={form.nama} maxLength={50} placeholder="Mis. Netflix" onChange={(e) => set("nama", e.target.value)} error={fe?.nama} autoFocus />
       <MoneyInput label="Nominal" value={form.nominal} onChange={(v) => set("nominal", v)} error={fe?.nominal} />
       <ChipPicker label="Dari akun" scroll value={form.akunId} options={akunOpt} onChange={(v) => set("akunId", v)} error={fe?.akunId} />
-      <ChipPicker label="Kategori" value={form.kategoriId} options={katOpt} onChange={(v) => set("kategoriId", v)} error={fe?.kategoriId} />
+      {/* key: pilihan induk dihitung ulang setelah daftar kategori termuat (mode edit) */}
+      <KategoriBertingkat key={kategori.isSuccess ? "siap" : "muat"} kategori={katKeluar} value={form.kategoriId} onChange={(v) => set("kategoriId", v)} error={fe?.kategoriId} />
       <div className="grid grid-cols-2 gap-3">
         <Input
           label="Jatuh tempo (tgl)"

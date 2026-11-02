@@ -8,6 +8,7 @@ import { nowWibIso, toWibIso } from "../common/clock.js";
 import { AppError } from "../common/errors.js";
 import { jsonBody } from "../common/validation.js";
 import { newRow, rowsOf, updatedRow } from "../repositories/rows.js";
+import { ensureKelompokBawaan } from "../services/kelompok.js";
 import {
   buildPengguna,
   ensureKategoriSistem,
@@ -44,7 +45,7 @@ auth.post(
   async (c) => {
     const body = c.req.valid("json");
     const store = c.var.store();
-    const data = await store.readMany(["Pengguna", "Kategori"]);
+    const data = await store.readMany(["Pengguna", "Kategori", "KelompokKategori"]);
     const existing = rowsOf(data, "Pengguna");
     if (existing.length) throw new AppError(409, "Setup awal sudah dilakukan.");
 
@@ -53,6 +54,7 @@ auth.post(
     user.last_login = nowWibIso(c.var.clock);
     await store.append("Pengguna", [newRow("Pengguna", user, user.id, c.var.clock)]);
     await ensureKategoriSistem(store, data.Kategori, user.id, c.var.clock);
+    await ensureKelompokBawaan(store, rowsOf(data, "KelompokKategori"), user.id, c.var.clock);
 
     const expiresAt = await issueToken(c, user);
     return c.json({ pengguna: toDto(user), expiresAt }, 201);
