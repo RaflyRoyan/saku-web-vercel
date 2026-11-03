@@ -304,10 +304,11 @@ Tepat satu dari `kelompok_id` / `kategori_id` terisi; unik per (periode_id, kelo
 | D | jenis | teks | `setor` / `tarik` |
 | E | periode_id | teks | setor: periode asal sisa. Tarik: periode aktif saat ditarik |
 | F | akun_id | teks | |
-| G | nominal | angka | setor boleh minus/0; tarik > 0 |
+| G | nominal | angka | setor = sisa akun − `diteruskan` (boleh minus/0); tarik > 0 |
 | H | keterangan | teks | setor: `"Sisa {nama periode}"` |
 | I | transaksi_id | teks | tarik: ID transaksi `masuk` TARIK_TABUNGAN yang dibuat otomatis |
 | J–M | audit | | |
+| N | diteruskan | angka | setor: bagian sisa akun yang diteruskan ke periode baru (bukan ditabung). Kosong = 0. Ditaruh setelah audit supaya kolom lama tidak bergeser |
 
 ---
 
@@ -397,12 +398,13 @@ Peringatan saldo minus **tidak memblokir** transaksi. Response transaksi menyert
    - `tanggalMulai` default = hari ini.
    - Kalau ada periode aktif P: `tanggalMulai` > `P.tanggal_mulai`, dan **tidak ada transaksi P yang bertanggal ≥ `tanggalMulai`**. Kalau ada → 409 dengan daftar transaksi tersebut.
    - `saldoAwal[]`: setiap akun_id harus milik user, aktif, tidak duplikat, saldo ≥ 0. Akun aktif yang tidak dikirim dianggap 0 dan **tidak** dibuatkan baris SaldoAwal.
+   - `teruskan[]` (`{ akunId, nominal }`): bagian sisa akun P yang diteruskan, 0 ≤ nominal ≤ max(0, sisa akun), akun tidak dobel → 400 di `teruskan.{i}.nominal`. Akun yang tidak dikirim = seluruh sisa ditabung. Saldo awal periode baru tetap diisi lewat `saldoAwal[]` (frontend mengisinya otomatis dari nominal diteruskan).
 2. Kalau ada P:
    1. `P.tanggal_selesai = tanggalMulai − 1 hari`.
    2. Hitung `saldo_akhir` setiap akun untuk P (§7.3). Akun yang dihitung = akun yang punya SaldoAwal atau transaksi di P.
-   3. Untuk setiap akun tersebut, **upsert** baris Tabungan `jenis=setor, periode_id=P, akun_id` dengan `nominal = saldo_akhir`, `tanggal = P.tanggal_selesai`, `keterangan = "Sisa {P.nama}"`. Nominal 0 tetap dicatat supaya jelas.
+   3. Untuk setiap akun tersebut, **upsert** baris Tabungan `jenis=setor, periode_id=P, akun_id` dengan `diteruskan` dari input, `nominal = saldo_akhir − diteruskan`, `tanggal = P.tanggal_selesai`, `keterangan = "Sisa {P.nama}"`. Nominal 0 tetap dicatat (menyimpan `diteruskan`), tapi tidak tampil di riwayat tabungan. Sisa minus tetap mengurangi tabungan.
 3. Buat Periode baru dan baris SaldoAwal-nya.
-4. Response: periode baru, ringkasan setor tabungan dari P, dan total tabungan.
+4. Response: periode baru, `setorTabungan`, `diteruskan` (akun dengan nominal > 0), `anggaranDisalin`, dan total tabungan.
 
 Urutan tulis ke Sheets: tabungan → update P → periode baru → saldo awal. Kalau gagal di tengah jalan, endpoint harus **idempoten saat diulang**:
 - Upsert tabungan.
@@ -419,7 +421,7 @@ Kalau ada perubahan pada **periode yang sudah tertutup**, yaitu:
 - edit saldo awal,
 - transaksi pindah periode karena tanggalnya diedit,
 
-maka **hitung ulang** baris Tabungan `setor` untuk periode yang terdampak (bisa 2 periode kalau transaksi pindah) dengan upsert per akun. Ini memastikan tidak pernah ada setor ganda.
+maka **hitung ulang** baris Tabungan `setor` untuk periode yang terdampak (bisa 2 periode kalau transaksi pindah) dengan upsert per akun. Ini memastikan tidak pernah ada setor ganda. `diteruskan` tidak berubah, jadi selisihnya masuk tabungan (`nominal = saldo_akhir − diteruskan`, boleh minus).
 
 ### 7.6 Tarik tabungan
 
@@ -568,7 +570,7 @@ Respons kategori memuat `kelompokId` + `kelompokNama` (pemasukan: `null`).
 | GET | `/api/periode` | | Semua periode, terbaru di atas |
 | GET | `/api/periode/aktif` | | Periode aktif + saldo awal, atau 404 kalau belum ada |
 | GET | `/api/periode/aktif/pratinjau-tutup` | | §7.4 pratinjau |
-| POST | `/api/periode/mulai` | `{ nama?, tanggalMulai?, keterangan?, saldoAwal: [{ akunId, saldo }], salinAnggaran? }` | §7.4, §7.8. Response menyertakan `anggaranDisalin` (jumlah baris) |
+| POST | `/api/periode/mulai` | `{ nama?, tanggalMulai?, keterangan?, saldoAwal: [{ akunId, saldo }], teruskan?: [{ akunId, nominal }], salinAnggaran? }` | §7.4, §7.8. Response menyertakan `anggaranDisalin` (jumlah baris) |
 | PUT | `/api/periode/{id}` | `{ nama, keterangan }` | Tanggal tidak bisa diubah lewat sini |
 | PUT | `/api/periode/{id}/saldo-awal` | `{ saldoAwal: [{ akunId, saldo }] }` | Ganti seluruh saldo awal periode itu (upsert + hapus yang tidak dikirim). Periode tertutup → hitung ulang tabungan (§7.5) |
 | GET | `/api/periode/{id}/ringkasan` | | §10.9 |

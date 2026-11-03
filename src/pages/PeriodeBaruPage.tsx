@@ -22,6 +22,7 @@ import { formatRupiah, formatTanggalPanjang, hariIni, tambahHari } from "../lib/
 interface Hasil {
   periode: Periode;
   setorTabungan: { akunId: string; nominal: number }[];
+  diteruskan: { akunId: string; nominal: number }[];
   anggaranDisalin: number;
   totalTabungan: number;
 }
@@ -33,7 +34,7 @@ const namaDefault = (tanggal: string) => {
 };
 
 type Langkah = "tutup" | "saldo" | "konfirmasi";
-const LABEL: Record<Langkah, string> = { tutup: "Tutup periode", saldo: "Saldo awal", konfirmasi: "Konfirmasi" };
+const LABEL: Record<Langkah, string> = { tutup: "Sisa periode", saldo: "Saldo awal", konfirmasi: "Konfirmasi" };
 
 function IndikatorLangkah({ aktif, total, label }: { aktif: number; total: number; label: string }) {
   return (
@@ -61,6 +62,9 @@ export default function PeriodeBaruPage() {
   const [nama, setNama] = useState("");
   const [keterangan, setKeterangan] = useState("");
   const [saldo, setSaldo] = useState<Record<string, number | null>>({});
+  // Bagian sisa periode lama yang diteruskan per akun; sisanya masuk tabungan
+  const [teruskan, setTeruskan] = useState<Record<string, number | null>>({});
+  const [diterapkan, setDiterapkan] = useState<Record<string, number>>({});
   // Anggaran periode terakhir bisa dipakai lagi (default dicentang kalau ada)
   const periodeList = usePeriodeList();
   const sebelumnya = aktif.data ?? periodeList.data?.[0];
@@ -72,17 +76,37 @@ export default function PeriodeBaruPage() {
     .filter(([, v]) => v)
     .map(([akunId, v]) => ({ akunId, saldo: v ?? 0 }));
   const total = items.reduce((n, s) => n + s.saldo, 0);
+  const sisaList = pratinjau.data?.sisa ?? [];
+  const teruskanItems = sisaList.filter((s) => (teruskan[s.akunId] ?? 0) > 0).map((s) => ({ akunId: s.akunId, nominal: teruskan[s.akunId] ?? 0 }));
+  const totalTeruskan = teruskanItems.reduce((n, s) => n + s.nominal, 0);
+  const masukTabungan = (pratinjau.data?.total ?? 0) - totalTeruskan;
+  const lewatSisa = (akunId: string, sisa: number) => (teruskan[akunId] ?? 0) > Math.max(0, sisa);
+
+  /** Saldo awal akun ikut nominal diteruskan, kecuali sudah diubah manual sejak terakhir diterapkan. */
+  const terapkanTeruskan = () => {
+    const sebelum = diterapkan;
+    const sesudah: Record<string, number> = {};
+    for (const { akunId } of sisaList) sesudah[akunId] = teruskan[akunId] ?? 0;
+    setDiterapkan(sesudah);
+    setSaldo((s) => {
+      const next = { ...s };
+      for (const [akunId, t] of Object.entries(sesudah)) {
+        if ((next[akunId] ?? 0) === (sebelum[akunId] ?? 0)) next[akunId] = t || null;
+      }
+      return next;
+    });
+  };
 
   const mulai = useMutation({
     mutationFn: () =>
       api<Hasil>("/periode/mulai", {
         method: "POST",
-        body: JSON.stringify({ nama: nama.trim() || undefined, tanggalMulai: tanggal, keterangan: keterangan.trim() || undefined, saldoAwal: items, salinAnggaran: bisaSalin && salin }),
+        body: JSON.stringify({ nama: nama.trim() || undefined, tanggalMulai: tanggal, keterangan: keterangan.trim() || undefined, saldoAwal: items, teruskan: teruskanItems, salinAnggaran: bisaSalin && salin }),
       }),
     onSuccess: () => invalidateKeuangan(qc),
     // Error per field ada di langkah 1
     onError: (e) => {
-      if (e instanceof ApiError && e.errors) setLangkah("saldo");
+      if (e instanceof ApiError && e.errors) setLangkah(Object.keys(e.errors).some((k) => k.startsWith("teruskan")) ? "tutup" : "saldo");
     },
   });
   const err = mulai.error instanceof ApiError ? mulai.error : null;
@@ -103,6 +127,11 @@ export default function PeriodeBaruPage() {
           <p className="text-sm">
             Saldo awal <span className="font-bold">{formatRupiah(total)}</span>
           </p>
+          {h.diteruskan.length > 0 && (
+            <p className="text-sm">
+              Diteruskan dari periode lama <span className="font-bold">{formatRupiah(h.diteruskan.reduce((n, s) => n + s.nominal, 0))}</span>
+            </p>
+          )}
           {h.setorTabungan.length > 0 && (
             <p className="text-sm">
               Masuk tabungan <span className="font-bold text-tabungan">{formatRupiah(h.setorTabungan.reduce((n, s) => n + s.nominal, 0))}</span>
@@ -149,25 +178,74 @@ export default function PeriodeBaruPage() {
           ) : (
             <>
               <p className="text-sm text-stone-700">
-                Sisa <span className="font-semibold">&ldquo;{pratinjau.data.periode.nama}&rdquo;</span> akan masuk tabungan:
+                Isi berapa sisa <span className="font-semibold">&ldquo;{pratinjau.data.periode.nama}&rdquo;</span> yang diteruskan ke periode baru. Sisanya masuk
+                tabungan.
               </p>
               <Card className="flex flex-col divide-y divide-garis">
                 {pratinjau.data.sisa.length === 0 && <p className="px-4 py-3 text-sm text-stone-500">Tidak ada saldo di periode ini.</p>}
-                {pratinjau.data.sisa.map((s) => (
-                  <div key={s.akunId} className="flex justify-between gap-3 px-4 py-2.5 text-sm">
-                    <span className="font-medium">{s.nama}</span>
-                    <span className={`font-semibold tabular-nums ${s.nominal < 0 ? "text-keluar" : ""}`}>
-                      {formatRupiah(s.nominal)}
-                      {s.nominal < 0 && <span className="block text-right text-xs font-normal">mengurangi tabungan</span>}
-                    </span>
+                {pratinjau.data.sisa.map((s, i) => {
+                  const t = teruskan[s.akunId] ?? 0;
+                  const idx = teruskanItems.findIndex((x) => x.akunId === s.akunId);
+                  const errorServer = idx >= 0 ? err?.errors?.[`teruskan.${idx}.nominal`] : undefined;
+                  return (
+                    <div key={s.akunId} className="flex flex-col gap-2 px-4 py-3 text-sm">
+                      <div className="flex justify-between gap-3">
+                        <span className="font-semibold">{s.nama}</span>
+                        <span className={`tabular-nums ${s.nominal < 0 ? "font-semibold text-keluar" : "text-stone-500"}`}>Sisa {formatRupiah(s.nominal)}</span>
+                      </div>
+                      {s.nominal > 0 ? (
+                        <>
+                          <div className="flex items-start gap-2">
+                            <div className="flex-1 [&_label]:sr-only">
+                              <MoneyInput
+                                label={`Diteruskan dari ${s.nama}`}
+                                placeholder="0 = semua ditabung"
+                                value={teruskan[s.akunId] ?? null}
+                                onChange={(v) => setTeruskan((x) => ({ ...x, [s.akunId]: v }))}
+                                error={lewatSisa(s.akunId, s.nominal) ? `Maksimal ${formatRupiah(s.nominal)}.` : errorServer}
+                                autoFocus={i === 0}
+                              />
+                            </div>
+                            <button
+                              type="button"
+                              aria-pressed={t === s.nominal}
+                              onClick={() => setTeruskan((x) => ({ ...x, [s.akunId]: t === s.nominal ? null : s.nominal }))}
+                              className={`min-h-11 shrink-0 rounded-full border px-3 font-semibold ${
+                                t === s.nominal ? "border-brand-700 bg-brand-50 text-brand-700" : "border-garis bg-white text-stone-700"
+                              } ${fokus}`}
+                            >
+                              Semua
+                            </button>
+                          </div>
+                          <span className="text-stone-500">
+                            Ditabung <span className="font-semibold text-tabungan tabular-nums">{formatRupiah(Math.max(0, s.nominal - t))}</span>
+                          </span>
+                        </>
+                      ) : (
+                        s.nominal < 0 && <span className="text-xs text-keluar">Sisa minus mengurangi tabungan.</span>
+                      )}
+                    </div>
+                  );
+                })}
+                <div className="flex flex-col gap-1 px-4 py-3">
+                  <div className="flex justify-between">
+                    <span>Diteruskan</span>
+                    <span className="font-semibold tabular-nums">{formatRupiah(totalTeruskan)}</span>
                   </div>
-                ))}
-                <div className="flex justify-between px-4 py-3 font-bold">
-                  <span>Total</span>
-                  <span className={`tabular-nums ${pratinjau.data.total < 0 ? "text-keluar" : ""}`}>{formatRupiah(pratinjau.data.total)}</span>
+                  <div className="flex justify-between font-bold">
+                    <span>Masuk tabungan</span>
+                    <span className={`tabular-nums ${masukTabungan < 0 ? "text-keluar" : "text-tabungan"}`}>{formatRupiah(masukTabungan)}</span>
+                  </div>
                 </div>
               </Card>
-              <Button block onClick={() => ke("saldo")}>
+              <Button
+                block
+                disabled={pratinjau.data.sisa.some((s) => lewatSisa(s.akunId, s.nominal))}
+                onClick={() => {
+                  terapkanTeruskan();
+                  ke("saldo");
+                }}
+              >
                 Lanjut
               </Button>
             </>
@@ -212,6 +290,7 @@ export default function PeriodeBaruPage() {
                       value={saldo[a.id] ?? null}
                       onChange={(v) => setSaldo((s) => ({ ...s, [a.id]: v }))}
                       error={err?.errors?.[`saldoAwal.${items.findIndex((x) => x.akunId === a.id)}.akunId`]}
+                      hint={(diterapkan[a.id] ?? 0) > 0 ? `Diteruskan ${formatRupiah(diterapkan[a.id] ?? 0)}` : undefined}
                       autoFocus={i === 0}
                     />
                   </div>
@@ -238,9 +317,15 @@ export default function PeriodeBaruPage() {
                 <p className="font-bold">
                   {lama.nama} · {formatTanggalPanjang(tambahHari(tanggal, -1))}
                 </p>
+                {totalTeruskan > 0 && (
+                  <>
+                    <p className="mt-3 text-sm text-stone-500">Diteruskan</p>
+                    <p className="font-bold tabular-nums">{formatRupiah(totalTeruskan)}</p>
+                  </>
+                )}
                 <p className="mt-3 text-sm text-stone-500">Masuk tabungan</p>
-                <p className={`text-xl font-extrabold tabular-nums ${(pratinjau.data?.total ?? 0) < 0 ? "text-keluar" : "text-tabungan"}`}>
-                  {formatRupiah(pratinjau.data?.total ?? 0)}
+                <p className={`text-xl font-extrabold tabular-nums ${masukTabungan < 0 ? "text-keluar" : "text-tabungan"}`}>
+                  {formatRupiah(masukTabungan)}
                 </p>
               </div>
             )}

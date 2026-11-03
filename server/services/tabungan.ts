@@ -13,7 +13,9 @@ export interface SetorPlan {
 
 /**
  * Upsert baris Tabungan `setor` untuk periode tertutup (spec §7.4 langkah 2, §7.5):
- * satu baris per akun yang punya saldo awal atau transaksi di periode itu, nominal = saldo akhir.
+ * satu baris per akun yang punya saldo awal atau transaksi di periode itu, nominal = saldo akhir − diteruskan.
+ * `teruskan` hanya dikirim saat menutup periode; saat hitung ulang, `diteruskan` dari baris lama tetap dipakai
+ * sehingga selisih akibat edit transaksi masuk ke tabungan.
  * Baris setor lama yang akunnya sudah tidak punya data di-nol-kan, bukan dihapus. Tidak pernah ada setor ganda.
  */
 export function rencanaSetor(
@@ -23,6 +25,7 @@ export function rencanaSetor(
   tabungan: ParsedRow<"Tabungan">[],
   by: string,
   clock: Clock,
+  teruskan?: Map<string, number>,
 ): SetorPlan {
   const tanggal = periode.tanggal_selesai ?? "";
   const keterangan = `Sisa ${periode.nama}`;
@@ -34,16 +37,18 @@ export function rencanaSetor(
 
   const plan: SetorPlan = { updates: [], appends: [], setor: [] };
   const taken = [...tabungan];
-  for (const [akunId, nominal] of saldo) {
-    plan.setor.push({ akunId, nominal });
+  for (const [akunId, sisa] of saldo) {
     const first = existing.find((t) => t.data.akun_id === akunId);
+    const diteruskan = teruskan ? (teruskan.get(akunId) ?? 0) : (first?.data.diteruskan ?? 0);
+    const nominal = sisa - diteruskan;
+    plan.setor.push({ akunId, nominal });
     if (first) {
       const d = first.data;
-      if (d.nominal !== nominal || d.tanggal !== tanggal || d.keterangan !== keterangan) {
+      if (d.nominal !== nominal || d.tanggal !== tanggal || d.keterangan !== keterangan || (d.diteruskan ?? 0) !== diteruskan) {
         plan.updates.push({
           sheet: "Tabungan",
           row: first.row,
-          values: updatedRow("Tabungan", d, { nominal, tanggal, keterangan }, by, clock),
+          values: updatedRow("Tabungan", d, { nominal, tanggal, keterangan, diteruskan }, by, clock),
         });
       }
     } else {
@@ -52,7 +57,7 @@ export function rencanaSetor(
       plan.appends.push(
         newRow(
           "Tabungan",
-          { id, user_id: periode.user_id, tanggal, jenis: "setor", periode_id: periode.id, akun_id: akunId, nominal, keterangan, transaksi_id: "" },
+          { id, user_id: periode.user_id, tanggal, jenis: "setor", periode_id: periode.id, akun_id: akunId, nominal, keterangan, transaksi_id: "", diteruskan },
           by,
           clock,
         ),

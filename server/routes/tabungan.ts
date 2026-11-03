@@ -65,6 +65,8 @@ tabungan.get("/", async (c) => {
     .sort((a, b) => (urutan.get(a.akunId) ?? 0) - (urutan.get(b.akunId) ?? 0));
 
   const riwayat: TabunganDto[] = milik
+    // Sisa yang seluruhnya diteruskan ke periode berikutnya tidak menambah tabungan
+    .filter((t) => !(t.jenis === "setor" && (t.nominal ?? 0) === 0))
     .sort((a, b) => (b.tanggal ?? "").localeCompare(a.tanggal ?? "") || (b.created_at ?? "").localeCompare(a.created_at ?? ""))
     .map((t) => ({
       id: t.id,
@@ -145,6 +147,7 @@ tabungan.post(
       nominal: body.nominal,
       keterangan,
       transaksi_id: transaksiId,
+      diteruskan: null,
     };
     const transaksi = {
       id: transaksiId,

@@ -131,3 +131,62 @@ describe("T10 tarik melebihi tabungan akun", () => {
     expect((await budi.post("/tabungan/tarik", { akunId: akun.GoPay, nominal: 1 })).body.title).toBe("Tabungan di GoPay hanya Rp 0.");
   });
 });
+
+describe("tutup periode: sisa diteruskan atau ditabung", () => {
+  it("sebagian diteruskan, sisanya ditabung; seluruhnya diteruskan → setor 0 tidak tampil di riwayat", async () => {
+    const { budi, akun, clock } = await bagiGaji();
+    clock.set("2026-11-25T03:00:00Z");
+    const res = await budi.post("/periode/mulai", {
+      teruskan: [
+        { akunId: akun.BCA, nominal: 1_000_000 },
+        { akunId: akun.GoPay, nominal: 275_000 },
+      ],
+      saldoAwal: [
+        { akunId: akun.BCA, saldo: 7_000_000 },
+        { akunId: akun.GoPay, saldo: 275_000 },
+      ],
+    });
+    expect(res.status).toBe(201);
+    expect(peta(res.body.setorTabungan)).toEqual({ [akun.BCA]: 1_997_500, [akun.Mandiri]: 2_000_000, [akun.Jago]: 699_000, [akun.GoPay]: 0 });
+    expect(res.body.diteruskan).toEqual([
+      { akunId: akun.BCA, nominal: 1_000_000 },
+      { akunId: akun.GoPay, nominal: 275_000 },
+    ]);
+    expect(res.body.totalTabungan).toBe(4_696_500);
+    const tab = (await budi.get("/tabungan")).body;
+    expect(tab.total).toBe(4_696_500);
+    expect(tab.riwayat.some((r: { akunId: string }) => r.akunId === akun.GoPay)).toBe(false);
+  });
+
+  it("edit transaksi periode lama: diteruskan tetap, selisih masuk tabungan (bisa minus)", async () => {
+    const { budi, akun, makan, clock, gopay } = await bagiGaji();
+    clock.set("2026-11-25T03:00:00Z");
+    await budi.post("/periode/mulai", { teruskan: [{ akunId: akun.GoPay, nominal: 275_000 }] });
+
+    await budi.put(`/transaksi/${gopay.id}`, { tipe: "keluar", akunId: akun.GoPay, kategoriId: makan, nominal: 50_000, tanggal: "2026-10-29" });
+    const tab = (await budi.get("/tabungan")).body;
+    const setor = tab.riwayat.filter((r: { akunId: string }) => r.akunId === akun.GoPay);
+    expect(setor).toHaveLength(1);
+    expect(setor[0].nominal).toBe(-25_000);
+    expect(tab.total).toBe(2_997_500 + 2_000_000 + 699_000 - 25_000);
+  });
+
+  it("validasi: melebihi sisa, akun dobel; tidak ada yang ditulis", async () => {
+    const { budi, akun, clock, store } = await bagiGaji();
+    clock.set("2026-11-25T03:00:00Z");
+    const res = await budi.post("/periode/mulai", {
+      teruskan: [
+        { akunId: akun.Jago, nominal: 700_000 },
+        { akunId: akun.BCA, nominal: 1 },
+        { akunId: akun.BCA, nominal: 2 },
+      ],
+    });
+    expect(res.status).toBe(400);
+    expect(res.body.errors).toEqual({
+      "teruskan.0.nominal": ["Maksimal Rp 699.000 (sisa Jago)."],
+      "teruskan.2.nominal": ["Akun BCA dobel."],
+    });
+    expect((await store.readMany(["Tabungan"])).Tabungan.rows).toHaveLength(0);
+    expect((await budi.get("/periode/aktif")).body.nama).toBe("Gajian Okt");
+  });
+});

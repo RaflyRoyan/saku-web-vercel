@@ -136,6 +136,9 @@ export const SCHEMA = {
     ["keterangan", "teks"],
     ["transaksi_id", "teks"],
     ...AUDIT,
+    // Ditambahkan setelah audit. Baris setor: bagian sisa akun yang diteruskan ke periode berikutnya (bukan ditabung).
+    // nominal setor = sisa − diteruskan. Kosong = 0 (data lama: seluruh sisa ditabung).
+    ["diteruskan", "angka"],
   ],
 } as const satisfies Record<string, readonly Kolom[]>;
 

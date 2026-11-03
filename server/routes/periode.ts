@@ -4,6 +4,7 @@ import type { AppEnv } from "../app.js";
 import { loadSession, requireAuth } from "../auth/session.js";
 import { todayWib } from "../common/clock.js";
 import { AppError, validationError, type FieldErrors } from "../common/errors.js";
+import { formatRupiah } from "../common/format.js";
 import { jsonBody } from "../common/validation.js";
 import { findOwned, newId, newRow, rowsOf, updatedRow, type ParsedRow } from "../repositories/rows.js";
 import { pesanBelumDipilih, pilihanAkun, type PilihanAkun } from "../services/akun-pengguna.js";
@@ -106,6 +107,19 @@ periode.post(
       tanggalMulai: tanggalSchema.optional(),
       keterangan: keteranganSchema.optional(),
       saldoAwal: saldoAwalSchema.default([]),
+      /** Bagian sisa tiap akun periode lama yang diteruskan (bukan ditabung). Akun yang tidak dikirim = seluruh sisa ditabung. */
+      teruskan: z
+        .array(
+          z.object({
+            akunId: z.string({ error: "Akun wajib dipilih." }).min(1, { error: "Akun wajib dipilih." }),
+            nominal: z
+              .number({ error: "Nominal harus berupa angka." })
+              .int({ error: "Nominal harus bilangan bulat." })
+              .min(0, { error: "Nominal tidak boleh minus." }),
+          }),
+          { error: "Teruskan harus berupa daftar." },
+        )
+        .default([]),
       /** Salin anggaran periode sebelumnya ke periode baru. */
       salinAnggaran: z.boolean({ error: "salinAnggaran harus true/false." }).default(false),
     }),
@@ -158,11 +172,27 @@ periode.post(
       if (akhir === selesai) tutup = terakhir;
     }
 
+    // Nominal diteruskan maksimal sisa akun itu (sisa minus tidak bisa diteruskan, tetap mengurangi tabungan)
+    const teruskan = new Map<string, number>();
+    if (tutup) {
+      const sisa = saldoPerAkun(tutup.data.id, saldoAwal, transaksi);
+      const errors: FieldErrors = {};
+      body.teruskan.forEach((item, i) => {
+        const key = `teruskan.${i}.nominal`;
+        const nama = akun.find((a) => a.data.id === item.akunId)?.data.nama ?? "akun";
+        const maks = Math.max(0, sisa.get(item.akunId) ?? 0);
+        if (teruskan.has(item.akunId)) errors[key] = [`Akun ${nama} dobel.`];
+        else if (item.nominal > maks) errors[key] = [`Maksimal ${formatRupiah(maks)} (sisa ${nama}).`];
+        teruskan.set(item.akunId, item.nominal);
+      });
+      if (Object.keys(errors).length) throw validationError(errors);
+    }
+
     const store = c.var.store();
     let setor: { akunId: string; nominal: number }[] = [];
     if (tutup) {
       const closed = { ...tutup.data, tanggal_selesai: selesai };
-      const plan = rencanaSetor(closed, saldoAwal, transaksi, tabungan, uid, clock);
+      const plan = rencanaSetor(closed, saldoAwal, transaksi, tabungan, uid, clock, teruskan);
       setor = plan.setor;
       await simpanSetor(store, plan);
       if (tutup.data.tanggal_selesai !== selesai) {
@@ -202,6 +232,7 @@ periode.post(
       {
         periode: periodeDto(baru),
         setorTabungan: setor,
+        diteruskan: [...teruskan].filter(([, n]) => n > 0).map(([akunId, nominal]) => ({ akunId, nominal })),
         anggaranDisalin,
         totalTabungan: totalTabungan(tanpaSetorLama, uid) + setor.reduce((n, s) => n + s.nominal, 0),
       },
