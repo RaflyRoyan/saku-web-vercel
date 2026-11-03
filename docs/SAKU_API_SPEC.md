@@ -367,7 +367,7 @@ Diberi `tanggal` dari pengguna:
 2. Kalau tidak ketemu (tanggal sebelum periode pertama, atau belum ada periode sama sekali) → 422 `"Belum ada periode untuk tanggal ini. Mulai periode baru dulu."`
 3. Tanggal di masa depan diperbolehkan maksimal sampai hari ini + 31 hari.
 
-Saat transaksi di-**edit** dan tanggalnya berubah, `periode_id` dihitung ulang.
+Saat transaksi di-**edit** dan tanggalnya berubah, `periode_id` dihitung ulang. Kalau tanggalnya tidak berubah, `periode_id` tetap (termasuk transaksi yang dibiarkan di periode lama saat mulai periode baru, §7.4).
 
 ### 7.3 Rumus saldo per akun dalam satu periode
 
@@ -396,7 +396,7 @@ Peringatan saldo minus **tidak memblokir** transaksi. Response transaksi menyert
 
 1. Validasi input:
    - `tanggalMulai` default = hari ini.
-   - Kalau ada periode aktif P: `tanggalMulai` > `P.tanggal_mulai`, dan **tidak ada transaksi P yang bertanggal ≥ `tanggalMulai`**. Kalau ada → 409 dengan daftar transaksi tersebut.
+   - Kalau ada periode aktif P: `tanggalMulai` > `P.tanggal_mulai`. Transaksi P yang bertanggal ≥ `tanggalMulai` (sudah tercatat sebelum periode baru dimulai) **dibiarkan tetap di P**: `periode_id` tidak diubah, ikut sisa & tabungan P. Jumlahnya dikembalikan di `transaksiTetapDiPeriodeLama`.
    - `saldoAwal[]`: setiap akun_id harus milik user, aktif, tidak duplikat, saldo ≥ 0. Akun aktif yang tidak dikirim dianggap 0 dan **tidak** dibuatkan baris SaldoAwal.
    - `teruskan[]` (`{ akunId, nominal }`): bagian sisa akun P yang diteruskan, 0 ≤ nominal ≤ max(0, sisa akun), akun tidak dobel → 400 di `teruskan.{i}.nominal`. Akun yang tidak dikirim = seluruh sisa ditabung. Saldo awal periode baru tetap diisi lewat `saldoAwal[]` (frontend mengisinya otomatis dari nominal diteruskan).
 2. Kalau ada P:
@@ -404,7 +404,7 @@ Peringatan saldo minus **tidak memblokir** transaksi. Response transaksi menyert
    2. Hitung `saldo_akhir` setiap akun untuk P (§7.3). Akun yang dihitung = akun yang punya SaldoAwal atau transaksi di P.
    3. Untuk setiap akun tersebut, **upsert** baris Tabungan `jenis=setor, periode_id=P, akun_id` dengan `diteruskan` dari input, `nominal = saldo_akhir − diteruskan`, `tanggal = P.tanggal_selesai`, `keterangan = "Sisa {P.nama}"`. Nominal 0 tetap dicatat (menyimpan `diteruskan`), tapi tidak tampil di riwayat tabungan. Sisa minus tetap mengurangi tabungan.
 3. Buat Periode baru dan baris SaldoAwal-nya.
-4. Response: periode baru, `setorTabungan`, `diteruskan` (akun dengan nominal > 0), `anggaranDisalin`, dan total tabungan.
+4. Response: periode baru, `setorTabungan`, `diteruskan` (akun dengan nominal > 0), `anggaranDisalin`, `transaksiTetapDiPeriodeLama`, dan total tabungan.
 
 Urutan tulis ke Sheets: tabungan → update P → periode baru → saldo awal. Kalau gagal di tengah jalan, endpoint harus **idempoten saat diulang**:
 - Upsert tabungan.

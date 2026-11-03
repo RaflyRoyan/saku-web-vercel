@@ -142,9 +142,11 @@ export function resolveTransaksi(
   if (tanggal > addDays(today, 31)) err("tanggal", "Tanggal paling lambat 31 hari dari hari ini.");
   if (Object.keys(errors).length) throw validationError(errors);
 
-  const periode = periodeUntukTanggal(sheets.periode, userId, tanggal);
+  // Edit tanpa ganti tanggal: tetap di periodenya. Transaksi yang dibiarkan di periode lama saat mulai periode baru
+  // (tanggal ≥ awal periode baru) tidak ikut pindah hanya karena nominal/kategori diedit.
+  const periodeId = current && current.tanggal === tanggal && current.periode_id ? current.periode_id : periodeUntukTanggal(sheets.periode, userId, tanggal).data.id;
   return {
-    periode_id: periode.data.id,
+    periode_id: periodeId,
     tanggal,
     tipe: body.tipe,
     akun_id: body.akunId,

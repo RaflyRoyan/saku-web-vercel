@@ -4,7 +4,6 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { CircleCheck } from "lucide-react";
 import PageHeader from "../components/layout/PageHeader";
 import { AkunIcon } from "../components/keuangan/AkunIcon";
-import { TransaksiItem } from "../components/keuangan/TransaksiItem";
 import { Button, fokus } from "../components/ui/Button";
 import { Card } from "../components/ui/Card";
 import { FormError } from "../components/ui/FormError";
@@ -15,7 +14,7 @@ import { useAnggaran } from "../hooks/useAnggaran";
 import { useAkun } from "../hooks/useMaster";
 import { usePeriodeAktif, usePeriodeList, type Periode } from "../hooks/usePeriode";
 import { usePratinjauTutup } from "../hooks/useTabungan";
-import { invalidateKeuangan, type Transaksi } from "../hooks/useTransaksi";
+import { invalidateKeuangan, useTransaksiList } from "../hooks/useTransaksi";
 import { ApiError, api } from "../lib/api";
 import { formatRupiah, formatTanggalPanjang, hariIni, tambahHari } from "../lib/format";
 
@@ -24,6 +23,7 @@ interface Hasil {
   setorTabungan: { akunId: string; nominal: number }[];
   diteruskan: { akunId: string; nominal: number }[];
   anggaranDisalin: number;
+  transaksiTetapDiPeriodeLama: number;
   totalTabungan: number;
 }
 
@@ -69,6 +69,8 @@ export default function PeriodeBaruPage() {
   const periodeList = usePeriodeList();
   const sebelumnya = aktif.data ?? periodeList.data?.[0];
   const anggaranLama = useAnggaran(sebelumnya?.id);
+  // Transaksi periode aktif bertanggal ≥ tanggal mulai: tetap ikut periode lama (hanya untuk info)
+  const tetap = useTransaksiList({ periodeId: aktif.data?.id, dari: tanggal }, 1, Boolean(aktif.data && tanggal));
   const [salin, setSalin] = useState(true);
   const bisaSalin = Boolean(anggaranLama.data?.ada);
 
@@ -137,6 +139,9 @@ export default function PeriodeBaruPage() {
               Masuk tabungan <span className="font-bold text-tabungan">{formatRupiah(h.setorTabungan.reduce((n, s) => n + s.nominal, 0))}</span>
             </p>
           )}
+          {h.transaksiTetapDiPeriodeLama > 0 && (
+            <p className="text-sm text-stone-500">{h.transaksiTetapDiPeriodeLama} transaksi yang sudah tercatat tetap ikut periode lama.</p>
+          )}
           {h.anggaranDisalin > 0 && (
             <p className="text-sm">
               Anggaran disalin dari periode sebelumnya.{" "}
@@ -163,7 +168,6 @@ export default function PeriodeBaruPage() {
     window.scrollTo(0, 0);
   };
   const minTanggal = lama ? tambahHari(lama.tanggalMulai, 1) : undefined;
-  const bentrok = err?.status === 409 ? ((err.extra.transaksi as Transaksi[] | undefined) ?? []) : [];
 
   return (
     <>
@@ -317,6 +321,11 @@ export default function PeriodeBaruPage() {
                 <p className="font-bold">
                   {lama.nama} · {formatTanggalPanjang(tambahHari(tanggal, -1))}
                 </p>
+                {(tetap.data?.pages[0]?.total ?? 0) > 0 && (
+                  <p className="mt-1 text-sm text-stone-500">
+                    {tetap.data?.pages[0]?.total} transaksi mulai {formatTanggalPanjang(tanggal)} yang sudah tercatat tetap ikut {lama.nama}.
+                  </p>
+                )}
                 {totalTeruskan > 0 && (
                   <>
                     <p className="mt-3 text-sm text-stone-500">Diteruskan</p>
@@ -353,17 +362,7 @@ export default function PeriodeBaruPage() {
             </label>
           )}
 
-          {bentrok.length > 0 && (
-            <div role="alert" className="flex flex-col gap-2">
-              <p className="rounded-xl bg-rose-50 px-3 py-2 text-sm font-medium text-keluar">{err?.title}</p>
-              <div className="divide-y divide-garis overflow-hidden rounded-2xl border border-garis bg-white">
-                {bentrok.map((t) => (
-                  <TransaksiItem key={t.id} t={t} />
-                ))}
-              </div>
-            </div>
-          )}
-          {bentrok.length === 0 && !err?.errors && <FormError error={mulai.error} />}
+          {!err?.errors && <FormError error={mulai.error} />}
 
           <Button block kirim loading={mulai.isPending} onClick={() => mulai.mutate()}>
             Mulai periode

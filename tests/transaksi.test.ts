@@ -97,7 +97,7 @@ describe("T8 pengeluaran melebihi saldo", () => {
 });
 
 describe("T11 mulai periode tidak valid", () => {
-  it("tanggal ≤ mulai periode aktif → 400; ada transaksi pada/setelah tanggal → 409 + daftar", async () => {
+  it("tanggal ≤ mulai periode aktif → 400; transaksi pada/setelah tanggal mulai tetap di periode lama", async () => {
     const { budi, akun, makan } = await siapkan();
     await budi.post("/periode/mulai", { tanggalMulai: "2026-10-25", saldoAwal: [{ akunId: akun.BCA, saldo: 100_000 }] });
     const sama = await budi.post("/periode/mulai", { tanggalMulai: "2026-10-25" });
@@ -106,13 +106,24 @@ describe("T11 mulai periode tidak valid", () => {
     expect((await budi.post("/periode/mulai", { tanggalMulai: "2026-10-01" })).status).toBe(400);
 
     const t = await budi.post("/transaksi", { tipe: "keluar", akunId: akun.BCA, kategoriId: makan, nominal: 5_000, tanggal: "2026-10-28" });
-    const bentrok = await budi.post("/periode/mulai", { tanggalMulai: "2026-10-28" });
-    expect(bentrok.status).toBe(409);
-    expect(bentrok.body.transaksi.map((x: { id: string }) => x.id)).toEqual([t.body.id]);
-    // Tidak ada yang tertulis
-    expect((await budi.get("/periode")).body).toHaveLength(1);
+    const lama = t.body.periodeId as string;
+    const baru = await budi.post("/periode/mulai", { tanggalMulai: "2026-10-28" });
+    expect(baru.status).toBe(201);
+    expect(baru.body.transaksiTetapDiPeriodeLama).toBe(1);
+    // Ikut sisa periode lama: 100.000 − 5.000
+    expect(baru.body.setorTabungan).toEqual([{ akunId: akun.BCA, nominal: 95_000 }]);
+    expect((await budi.get(`/transaksi/${t.body.id}`)).body.periodeId).toBe(lama);
+    expect((await budi.get(`/periode/${baru.body.periode.id}/ringkasan`)).body.totalPengeluaran).toBe(0);
 
-    expect((await budi.post("/periode/mulai", { tanggalMulai: "2026-10-29" })).status).toBe(201);
+    // Edit tanpa ganti tanggal tetap di periode lama; ganti tanggal → ikut periode sesuai tanggal
+    const ubah = await budi.put(`/transaksi/${t.body.id}`, { tipe: "keluar", akunId: akun.BCA, kategoriId: makan, nominal: 7_000, tanggal: "2026-10-28" });
+    expect(ubah.body.periodeId).toBe(lama);
+    const pindah = await budi.put(`/transaksi/${t.body.id}`, { tipe: "keluar", akunId: akun.BCA, kategoriId: makan, nominal: 7_000, tanggal: "2026-10-29" });
+    expect(pindah.body.periodeId).toBe(baru.body.periode.id);
+
+    // Transaksi baru bertanggal ≥ mulai masuk periode baru
+    const t2 = await budi.post("/transaksi", { tipe: "keluar", akunId: akun.BCA, kategoriId: makan, nominal: 1_000, tanggal: "2026-10-28" });
+    expect(t2.body.periodeId).toBe(baru.body.periode.id);
   });
 });
 

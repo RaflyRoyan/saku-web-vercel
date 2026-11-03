@@ -34,6 +34,9 @@ export interface FilterTransaksi {
   /** Kategori induk pengeluaran ("LAINNYA" untuk Lainnya). */
   kelompokId?: string;
   q?: string;
+  /** Rentang tanggal yyyy-MM-dd (inklusif). */
+  dari?: string;
+  sampai?: string;
 }
 
 interface Halaman {

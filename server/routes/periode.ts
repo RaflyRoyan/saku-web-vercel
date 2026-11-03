@@ -13,7 +13,6 @@ import { addDays, namaDefault, periodeDto, periodeMilik } from "../services/peri
 import { hitungRingkasan } from "../services/ringkasan.js";
 import { periodeAktif, saldoPerAkun } from "../services/saldo.js";
 import { rencanaSetor, rencanaSetorTerdampak, simpanSetor, totalTabungan } from "../services/tabungan.js";
-import { transaksiMapper, urutTransaksi } from "../services/transaksi.js";
 import type { CellValue, RowUpdate } from "../sheets/store.js";
 
 const tanggalSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, { error: "Format tanggal harus yyyy-MM-dd." });
@@ -140,6 +139,7 @@ periode.post(
     cekSaldoAwal(body.saldoAwal, akun, pilihanAkun(rowsOf(data, "AkunPengguna"), uid));
 
     let tutup: ParsedRow<"Periode"> | undefined;
+    let tetapDiLama = 0;
     const aktif = periodeAktif(semuaPeriode, uid);
     // Sumber salinan anggaran = periode terakhir sebelum periode baru
     const sebelumnya = aktif ?? periodeMilik(semuaPeriode, uid)[0];
@@ -148,19 +148,8 @@ periode.post(
       if (tanggalMulai <= (p.tanggal_mulai ?? "")) {
         throw validationError({ tanggalMulai: [`Tanggal mulai harus setelah ${p.tanggal_mulai} (awal ${p.nama}).`] });
       }
-      const bentrok = transaksi
-        .filter((t) => t.data.user_id === uid && t.data.periode_id === p.id && (t.data.tanggal ?? "") >= tanggalMulai)
-        .map((t) => t.data)
-        .sort(urutTransaksi);
-      if (bentrok.length) {
-        const toDto = transaksiMapper(akun, rowsOf(data, "Kategori"));
-        throw new AppError(
-          409,
-          `Masih ada ${bentrok.length} transaksi ${p.nama} pada atau setelah tanggal mulai. Ubah tanggalnya dulu.`,
-          undefined,
-          { transaksi: bentrok.map(toDto) },
-        );
-      }
+      // Transaksi P bertanggal ≥ tanggalMulai dibiarkan tetap di P (periode_id tidak diubah), ikut sisa & tabungan P
+      tetapDiLama = transaksi.filter((t) => t.data.user_id === uid && t.data.periode_id === p.id && (t.data.tanggal ?? "") >= tanggalMulai).length;
       tutup = aktif;
     } else {
       const [terakhir] = periodeMilik(semuaPeriode, uid);
@@ -234,6 +223,7 @@ periode.post(
         setorTabungan: setor,
         diteruskan: [...teruskan].filter(([, n]) => n > 0).map(([akunId, nominal]) => ({ akunId, nominal })),
         anggaranDisalin,
+        transaksiTetapDiPeriodeLama: tetapDiLama,
         totalTabungan: totalTabungan(tanpaSetorLama, uid) + setor.reduce((n, s) => n + s.nominal, 0),
       },
       201,
