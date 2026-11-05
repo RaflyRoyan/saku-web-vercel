@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { CalendarRange, ChevronRight, LogOut, PiggyBank, Repeat, Settings, Tags, Users, type LucideIcon } from "lucide-react";
+import { Braces, CalendarRange, ChevronRight, LogOut, PiggyBank, Repeat, Settings, Tags, Users, type LucideIcon } from "lucide-react";
 import PageHeader from "../components/layout/PageHeader";
 import { fokus } from "../components/ui/Button";
 import { Card } from "../components/ui/Card";
@@ -11,6 +11,7 @@ const MENU: { to: string; label: string; icon: LucideIcon; adminOnly?: boolean }
   { to: "/master", label: "Master", icon: Tags },
   { to: "/periode", label: "Periode", icon: CalendarRange },
   { to: "/pengaturan", label: "Pengaturan", icon: Settings },
+  { to: "/dokumentasi-api", label: "Dokumentasi API", icon: Braces },
   { to: "/pengguna", label: "Kelola Pengguna", icon: Users, adminOnly: true },
 ];
 
