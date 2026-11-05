@@ -1,11 +1,13 @@
 import { Link } from "react-router-dom";
-import { Braces, CalendarRange, ChevronRight, LogOut, PiggyBank, Repeat, Settings, Tags, Users, type LucideIcon } from "lucide-react";
+import { Braces, CalendarRange, ChevronRight, LogOut, PiggyBank, QrCode, ReceiptText, Repeat, Settings, Tags, Users, type LucideIcon } from "lucide-react";
 import PageHeader from "../components/layout/PageHeader";
 import { fokus } from "../components/ui/Button";
 import { Card } from "../components/ui/Card";
 import { useLogout, useMe } from "../hooks/useAuth";
 
 const MENU: { to: string; label: string; icon: LucideIcon; adminOnly?: boolean }[] = [
+  { to: "/qris", label: "Terima QRIS", icon: QrCode },
+  { to: "/split", label: "Split Bill", icon: ReceiptText },
   { to: "/langganan", label: "Langganan", icon: Repeat },
   { to: "/tabungan", label: "Tabungan", icon: PiggyBank },
   { to: "/master", label: "Master", icon: Tags },

@@ -1,7 +1,8 @@
 import { Link } from "react-router-dom";
-import { AlarmClock, ChevronRight, PiggyBank, Receipt, Settings } from "lucide-react";
+import { AlarmClock, ChevronRight, PiggyBank, QrCode, Receipt, ReceiptText, Settings } from "lucide-react";
 import { AkunIcon } from "../components/keuangan/AkunIcon";
 import { KartuAnggaran } from "../components/keuangan/KartuAnggaran";
+import { KartuSplit } from "../components/keuangan/KartuSplit";
 import { KomposisiKategori } from "../components/keuangan/KomposisiKategori";
 import { LanggananAksi } from "../components/keuangan/LanggananAksi";
 import { PeriodeKosong } from "../components/keuangan/PeriodeKosong";
@@ -101,7 +102,17 @@ export default function DashboardPage() {
           </div>
         </div>
 
+        <div className="grid grid-cols-2 gap-3">
+          <Link to="/qris" className={`flex min-h-14 items-center gap-2 rounded-2xl border border-garis bg-white px-4 text-sm font-semibold shadow-sm hover:bg-brand-50 ${fokus}`}>
+            <QrCode className="size-5 text-brand-600" aria-hidden /> Terima QRIS
+          </Link>
+          <Link to="/split/baru" className={`flex min-h-14 items-center gap-2 rounded-2xl border border-garis bg-white px-4 text-sm font-semibold shadow-sm hover:bg-brand-50 ${fokus}`}>
+            <ReceiptText className="size-5 text-brand-600" aria-hidden /> Split bill
+          </Link>
+        </div>
+
         <KartuAnggaran data={anggaran} />
+        <KartuSplit />
 
         {pengingat.length > 0 && (
           <section aria-labelledby="pengingat">

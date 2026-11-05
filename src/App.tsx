@@ -17,6 +17,10 @@ import TabunganPage from "./pages/TabunganPage";
 import MasterPage from "./pages/MasterPage";
 import LainnyaPage from "./pages/LainnyaPage";
 import PengaturanPage from "./pages/PengaturanPage";
+import QrisPage from "./pages/QrisPage";
+import SplitDetailPage from "./pages/SplitDetailPage";
+import SplitFormPage from "./pages/SplitFormPage";
+import SplitPage from "./pages/SplitPage";
 import PenggunaPage from "./pages/PenggunaPage";
 import NotFoundPage from "./pages/NotFoundPage";
 import RequireAuth from "./components/RequireAuth";
@@ -46,6 +50,11 @@ export default function App() {
             <Route path="/anggaran" element={<AnggaranPage />} />
             <Route path="/dokumentasi-api" element={<DokumentasiApiPage />} />
             <Route path="/langganan" element={<LanggananPage />} />
+            <Route path="/qris" element={<QrisPage />} />
+            <Route path="/split" element={<SplitPage />} />
+            <Route path="/split/baru" element={<SplitFormPage />} />
+            <Route path="/split/:id" element={<SplitDetailPage />} />
+            <Route path="/split/:id/ubah" element={<SplitFormPage />} />
             <Route path="/tabungan" element={<TabunganPage />} />
             <Route path="/master" element={<MasterPage />} />
             <Route path="/lainnya" element={<LainnyaPage />} />

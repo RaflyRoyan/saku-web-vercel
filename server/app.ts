@@ -13,7 +13,9 @@ import { health } from "./routes/health.js";
 import { kategori } from "./routes/kategori.js";
 import { kelompokKategori } from "./routes/kelompok-kategori.js";
 import { pengguna } from "./routes/pengguna.js";
+import { pengaturan } from "./routes/pengaturan.js";
 import { periode } from "./routes/periode.js";
+import { split } from "./routes/split.js";
 import { tabungan } from "./routes/tabungan.js";
 import { transaksi } from "./routes/transaksi.js";
 import type { SheetStore } from "./sheets/store.js";
@@ -66,6 +68,8 @@ export function createApp(deps: Partial<AppDeps> = {}) {
   app.route("/tabungan", tabungan);
   app.route("/berulang", berulang);
   app.route("/dashboard", dashboard);
+  app.route("/split", split);
+  app.route("/pengaturan", pengaturan);
 
   app.notFound((c) => problem(c, 404, "Endpoint tidak ditemukan."));
   app.onError((err, c) => problemFromError(c, err));

@@ -6,6 +6,7 @@ import { jsonBody } from "../common/validation.js";
 import { findOwned, newId, newRow, rowsOf, updatedRow } from "../repositories/rows.js";
 import { peringatanAnggaran } from "../services/anggaran.js";
 import { kelompokIdDari } from "../services/kelompok.js";
+import { assertBukanSplit } from "../services/split.js";
 import { periodeAktif } from "../services/saldo.js";
 import { rencanaSetorTerdampak, simpanSetor } from "../services/tabungan.js";
 import {
@@ -21,6 +22,8 @@ import type { SheetData } from "../sheets/store.js";
 const SHEETS = ["Akun", "AkunPengguna", "Kategori", "KelompokKategori", "Periode", "SaldoAwal", "Transaksi", "Tabungan"] as const;
 /** POST/PUT juga butuh Anggaran untuk peringatan anggaran terlewati. */
 const SHEETS_TULIS = [...SHEETS, "Anggaran"] as const;
+/** PUT/DELETE: transaksi milik split bill dikunci. */
+const SHEETS_SPLIT = ["SplitBill", "SplitPeserta"] as const;
 
 function parseAll(data: Record<(typeof SHEETS)[number], SheetData>) {
   return {
@@ -118,11 +121,12 @@ transaksi.post("/", jsonBody(transaksiBody), async (c) => {
 
 transaksi.put("/:id", jsonBody(transaksiBody), async (c) => {
   const body = c.req.valid("json");
-  const { user, data } = await loadSession(c, SHEETS_TULIS);
+  const { user, data } = await loadSession(c, [...SHEETS_TULIS, ...SHEETS_SPLIT]);
   const uid = user.data.id;
   const s = parseAll(data);
   const target = findOwned(s.transaksi, c.req.param("id"), uid);
   assertBukanTarik(target.data, s.kategori);
+  assertBukanSplit(target.data, rowsOf(data, "SplitBill"), rowsOf(data, "SplitPeserta"));
   const kolom = resolveTransaksi(body, s, uid, c.var.clock, target.data);
 
   const values = updatedRow("Transaksi", target.data, kolom, uid, c.var.clock);
@@ -139,11 +143,12 @@ transaksi.put("/:id", jsonBody(transaksiBody), async (c) => {
 });
 
 transaksi.delete("/:id", async (c) => {
-  const { user, data } = await loadSession(c, SHEETS);
+  const { user, data } = await loadSession(c, [...SHEETS, ...SHEETS_SPLIT]);
   const uid = user.data.id;
   const s = parseAll(data);
   const target = findOwned(s.transaksi, c.req.param("id"), uid);
   assertBukanTarik(target.data, s.kategori);
+  assertBukanSplit(target.data, rowsOf(data, "SplitBill"), rowsOf(data, "SplitPeserta"));
 
   const after = s.transaksi.filter((r) => r.row !== target.row);
   const setor = rencanaSetorTerdampak([target.data.periode_id], s.periode, s.saldoAwal, after, s.tabungan, uid, c.var.clock);

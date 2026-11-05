@@ -140,6 +140,56 @@ export const SCHEMA = {
     // nominal setor = sisa − diteruskan. Kosong = 0 (data lama: seluruh sisa ditabung).
     ["diteruskan", "angka"],
   ],
+  // Split bill: satu struk yang ditalangi pengguna lalu ditagih ke peserta lain (spec split bill §3).
+  SplitBill: [
+    ["id", "teks"],
+    ["user_id", "teks"],
+    ["tanggal", "tanggal"],
+    ["nama", "teks"],
+    ["akun_id", "teks"],
+    ["kategori_id", "teks"],
+    ["akun_terima_id", "teks"],
+    ["pajak", "angka"],
+    ["servis", "angka"],
+    ["diskon", "angka"],
+    ["total", "angka"],
+    ["transaksi_id", "teks"],
+    ...AUDIT,
+  ],
+  SplitItem: [
+    ["id", "teks"],
+    ["user_id", "teks"],
+    ["split_id", "teks"],
+    ["nama", "teks"],
+    ["qty", "angka"],
+    // Harga total baris (bukan per unit)
+    ["harga", "angka"],
+    // ID peserta pemilik item, dipisah koma
+    ["peserta", "teks"],
+    ["urutan", "angka"],
+    ...AUDIT,
+  ],
+  SplitPeserta: [
+    ["id", "teks"],
+    ["user_id", "teks"],
+    ["split_id", "teks"],
+    ["nama", "teks"],
+    ["saya", "boolean"],
+    ["nominal", "angka"],
+    ["lunas", "boolean"],
+    // Transaksi masuk saat lunas
+    ["transaksi_id", "teks"],
+    ["urutan", "angka"],
+    ...AUDIT,
+  ],
+  // Pengaturan per pengguna (kunci–nilai), mis. kunci "qris" = payload QRIS statis
+  Pengaturan: [
+    ["id", "teks"],
+    ["user_id", "teks"],
+    ["kunci", "teks"],
+    ["nilai", "teks"],
+    ...AUDIT,
+  ],
 } as const satisfies Record<string, readonly Kolom[]>;
 
 export type SheetName = keyof typeof SCHEMA;
@@ -159,6 +209,10 @@ export const ID_PREFIX = {
   Berulang: "RB",
   BerulangLewati: "RL",
   Tabungan: "TB",
+  SplitBill: "SB",
+  SplitItem: "SI",
+  SplitPeserta: "SP",
+  Pengaturan: "PG",
 } as const satisfies Partial<Record<SheetName, string>>;
 
 interface TipeTs {

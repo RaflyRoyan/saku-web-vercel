@@ -33,6 +33,8 @@ export interface SheetStore {
   updateRows(updates: readonly RowUpdate[]): Promise<void>;
   /** Hapus satu baris; baris di bawahnya naik satu. */
   deleteRow(sheet: SheetName, row: number): Promise<void>;
+  /** Hapus banyak baris, boleh lintas sheet (satu `batchUpdate`). Nomor baris = bacaan sebelum penghapusan. */
+  deleteRows(rows: readonly { sheet: SheetName; row: number }[]): Promise<void>;
 }
 
 /** Sheet yang diminta tidak ada di spreadsheet. */

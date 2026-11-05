@@ -25,7 +25,7 @@ describe("T1 · setup awal", () => {
 
     const { Kategori } = await store.readMany(["Kategori"]);
     const kode = parseRows("Kategori", Kategori).map((r) => r.data.kode_sistem).filter(Boolean);
-    expect(kode.sort()).toEqual(["BIAYA_ADMIN", "TARIK_TABUNGAN"]);
+    expect(kode.sort()).toEqual(["BIAYA_ADMIN", "PATUNGAN", "TARIK_TABUNGAN"]);
 
     // Setup ulang tidak menggandakan kategori sistem (sudah ada)
     expect((await a.get("/auth/me")).body.username).toBe("admin");

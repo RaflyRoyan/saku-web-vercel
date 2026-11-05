@@ -54,6 +54,11 @@ export class MemorySheetStore implements SheetStore {
     this.grid(sheet).splice(row - 1, 1);
   }
 
+  async deleteRows(rows: readonly { sheet: SheetName; row: number }[]): Promise<void> {
+    // Dari bawah supaya nomor baris lain tidak bergeser
+    for (const r of [...rows].sort((a, b) => b.row - a.row)) await this.deleteRow(r.sheet, r.row);
+  }
+
   /** Salinan semua sheet (untuk FileSheetStore). */
   dump(): Partial<Record<SheetName, Grid>> {
     return Object.fromEntries([...this.grids].map(([k, g]) => [k, g.map((r) => [...r])]));
@@ -124,5 +129,9 @@ export class FileSheetStore implements SheetStore {
 
   deleteRow(sheet: SheetName, row: number) {
     return this.mutate((s) => s.deleteRow(sheet, row));
+  }
+
+  deleteRows(rows: readonly { sheet: SheetName; row: number }[]) {
+    return this.mutate((s) => s.deleteRows(rows));
   }
 }

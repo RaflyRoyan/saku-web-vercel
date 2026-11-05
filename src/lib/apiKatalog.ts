@@ -415,6 +415,72 @@ export const KATALOG: Endpoint[] = [
   { id: "berulang-lewati", grup: "Langganan", method: "POST", path: "/berulang/{id}/lewati", judul: "Lewati bulan", ket: "", akses: "login", field: [{ nama: "bulan", ket: "yyyy-MM", wajib: true }], contoh: { bulan: "2026-11" }, respons: "201 `{ id, berulangId, bulan }`" },
   { id: "berulang-batal-lewati", grup: "Langganan", method: "DELETE", path: "/berulang/{id}/lewati/{bulan}", judul: "Batal lewati", ket: "", akses: "login", respons: "204" },
 
+  // ── Split Bill
+  { id: "split-list", grup: "Split Bill", method: "GET", path: "/split", judul: "Daftar split bill", ket: "Urut tanggal terbaru.", akses: "login", respons: "`[{ id, nama, tanggal, total, jumlahPeserta, belumLunas: { jumlah, nominal } }]`" },
+  { id: "split-nama", grup: "Split Bill", method: "GET", path: "/split/nama", judul: "Nama peserta", ket: "Nama yang pernah dipakai (autocomplete), paling sering dulu.", akses: "login", respons: "`string[]`" },
+  { id: "split-get", grup: "Split Bill", method: "GET", path: "/split/{id}", judul: "Detail split bill", ket: "", akses: "login", respons: "`{ id, nama, tanggal, akunId, kategoriId, akunTerimaId, subtotal, pajak, servis, diskon, total, transaksiId, items[], peserta[], belumLunas }`" },
+  {
+    id: "split-post",
+    grup: "Split Bill",
+    method: "POST",
+    path: "/split",
+    judul: "Buat split bill",
+    ket: "Bagian tiap orang dihitung server: porsi item dibagi rata antar pemilik, pajak/servis/diskon proporsional, sisa pembulatan ke peserta \"saya\". Membuat 1 transaksi keluar sebesar total.",
+    akses: "login",
+    field: [
+      { nama: "nama", ket: "Nama tagihan", wajib: true },
+      { nama: "tanggal", ket: "yyyy-MM-dd, default hari ini" },
+      { nama: "akunId", ket: "Akun pembayar", wajib: true },
+      { nama: "kategoriId", ket: "Kategori pengeluaran", wajib: true },
+      { nama: "akunTerimaId", ket: "Akun penerima pembayaran teman", wajib: true },
+      { nama: "pajak / servis / diskon", ket: "Rupiah, default 0" },
+      { nama: "peserta", ket: "[{ id?, nama, saya }], tepat 1 saya, min 2 orang", wajib: true },
+      { nama: "items", ket: "[{ nama, qty, harga, peserta: indeks peserta[] }]", wajib: true },
+    ],
+    contoh: {
+      nama: "Makan Bakmi",
+      akunId: "AK-...",
+      kategoriId: "KT-...",
+      akunTerimaId: "AK-...",
+      pajak: 6000,
+      peserta: [{ nama: "Saya", saya: true }, { nama: "Andi", saya: false }],
+      items: [{ nama: "Bakmi", qty: 1, harga: 30000, peserta: [0] }, { nama: "Nasi", qty: 1, harga: 30000, peserta: [1] }],
+    },
+    respons: "201 detail split + `peringatan[]`.",
+  },
+  { id: "split-put", grup: "Split Bill", method: "PUT", path: "/split/{id}", judul: "Ubah split bill", ket: "Body sama dengan buat. Peserta lama dicocokkan lewat `id`; peserta lunas tidak boleh dihapus (422). Transaksi keluar & pemasukan peserta lunas ikut diperbarui.", akses: "login", contoh: { nama: "Makan Bakmi", akunId: "AK-...", kategoriId: "KT-...", akunTerimaId: "AK-...", peserta: [{ id: "SP-...", nama: "Saya", saya: true }, { id: "SP-...", nama: "Andi", saya: false }], items: [{ nama: "Bakmi", qty: 1, harga: 30000, peserta: [0, 1] }] }, respons: "Detail split + `peringatan[]`." },
+  { id: "split-delete", grup: "Split Bill", method: "DELETE", path: "/split/{id}", judul: "Hapus split bill", ket: "Transaksi keluar dan semua pemasukan dari peserta ikut terhapus.", akses: "login", respons: "204" },
+  {
+    id: "split-lunas",
+    grup: "Split Bill",
+    method: "PUT",
+    path: "/split/{id}/peserta/{pid}/lunas",
+    judul: "Tandai lunas / belum",
+    ket: "lunas=true → transaksi masuk kategori Patungan ke akun penerima. false → transaksi itu dihapus. Idempoten. Peserta \"saya\" → 422.",
+    akses: "login",
+    field: [
+      { nama: "lunas", ket: "true / false", wajib: true },
+      { nama: "tanggal", ket: "Tanggal pemasukan, default hari ini" },
+    ],
+    contoh: { lunas: true },
+    respons: "Detail split terbaru.",
+  },
+
+  // ── Pengaturan
+  { id: "pengaturan-qris-get", grup: "Pengaturan", method: "GET", path: "/pengaturan/qris", judul: "QRIS tersimpan", ket: "QRIS statis untuk kartu tagihan split bill.", akses: "login", respons: "`{ payload, merchant, kota }` atau `null`" },
+  {
+    id: "pengaturan-qris-put",
+    grup: "Pengaturan",
+    method: "PUT",
+    path: "/pengaturan/qris",
+    judul: "Simpan QRIS",
+    ket: "Payload EMV divalidasi (CRC16, penanda ID.CO.QRIS). null = hapus.",
+    akses: "login",
+    field: [{ nama: "payload", ket: "Isi teks QR QRIS statis, atau null", wajib: true }],
+    contoh: { payload: null },
+    respons: "`{ payload, merchant, kota }` atau `null`",
+  },
+
   // ── Pengguna
   { id: "pengguna-list", grup: "Pengguna", method: "GET", path: "/pengguna", judul: "Daftar pengguna", ket: "", akses: "admin", respons: "`[{ id, username, nama, peran, aktif, lastLogin }]`" },
   {

@@ -189,4 +189,14 @@ export class GoogleSheetStore implements SheetStore {
       }),
     );
   }
+
+  async deleteRows(rows: readonly { sheet: SheetName; row: number }[]): Promise<void> {
+    if (!rows.length) return;
+    const ids = await this.ensureSheets([...new Set(rows.map((r) => r.sheet))]);
+    // Request dijalankan berurutan: hapus dari bawah supaya nomor baris lain tidak bergeser
+    const requests = [...rows]
+      .sort((a, b) => b.row - a.row)
+      .map((r) => ({ deleteDimension: { range: { sheetId: ids.get(r.sheet), dimension: "ROWS", startIndex: r.row - 1, endIndex: r.row } } }));
+    await this.call(() => this.api.spreadsheets.batchUpdate({ spreadsheetId: this.spreadsheetId, requestBody: { requests } }));
+  }
 }

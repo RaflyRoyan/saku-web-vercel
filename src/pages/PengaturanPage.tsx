@@ -5,6 +5,7 @@ import { arrayMove, SortableContext, sortableKeyboardCoordinates, useSortable, v
 import { CSS } from "@dnd-kit/utilities";
 import { CircleAlert, CircleCheck, GripVertical, LogOut } from "lucide-react";
 import PageHeader from "../components/layout/PageHeader";
+import { PengaturanQris } from "../components/split/PengaturanQris";
 import { Button, fokus } from "../components/ui/Button";
 import { Card } from "../components/ui/Card";
 import { Input, PasswordInput } from "../components/ui/Input";
@@ -267,6 +268,9 @@ export default function PengaturanPage() {
         <Section title="Profil">{me ? <ProfilForm me={me} /> : <Skeleton className="h-40" />}</Section>
         <Section title="Akun saya">
           <AkunSaya />
+        </Section>
+        <Section title="QRIS untuk tagihan">
+          <PengaturanQris />
         </Section>
         <Section title="Ganti password">
           <PasswordForm />

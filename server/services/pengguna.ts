@@ -78,10 +78,12 @@ export function buildPengguna(
 const KATEGORI_SISTEM = [
   { kode: "BIAYA_ADMIN", nama: "Biaya Admin Bank", tipe: "keluar" },
   { kode: "TARIK_TABUNGAN", nama: "Tarik Tabungan", tipe: "masuk" },
+  // Pelunasan split bill dari peserta lain
+  { kode: "PATUNGAN", nama: "Patungan", tipe: "masuk" },
 ] as const;
 
 /**
- * Pastikan 2 kategori sistem ada di master `Kategori` (02 §2).
+ * Pastikan kategori sistem ada di master `Kategori` (02 §2).
  * Kategori aktif dengan nama + tipe sama tapi tanpa kode diberi kode, supaya nama tidak dobel.
  */
 export async function ensureKategoriSistem(

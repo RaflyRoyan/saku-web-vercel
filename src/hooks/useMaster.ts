@@ -28,7 +28,7 @@ export interface Kategori {
   id: string;
   nama: string;
   tipe: TipeKategori;
-  kodeSistem: "BIAYA_ADMIN" | "TARIK_TABUNGAN" | null;
+  kodeSistem: "BIAYA_ADMIN" | "TARIK_TABUNGAN" | "PATUNGAN" | null;
   aktif: boolean;
   /** Kategori induk; hanya pengeluaran (pemasukan = null). Tanpa induk = "LAINNYA". */
   kelompokId: string | null;

@@ -14,7 +14,7 @@ export interface Transaksi {
   akunTujuanNama: string | null;
   kategoriId: string | null;
   kategoriNama: string | null;
-  kodeSistem: "BIAYA_ADMIN" | "TARIK_TABUNGAN" | null;
+  kodeSistem: "BIAYA_ADMIN" | "TARIK_TABUNGAN" | "PATUNGAN" | null;
   nominal: number;
   biayaAdmin: number;
   deskripsi: string;
@@ -79,5 +79,5 @@ export function useTransaksi(id: string | undefined) {
 
 /** Setelah transaksi/periode berubah: saldo, ringkasan, dan riwayat ikut berubah. */
 export function invalidateKeuangan(qc: QueryClient) {
-  for (const key of [["transaksi"], ["ringkasan"], ["periode"], ["akun"], ["tabungan"], ["berulang"], ["dashboard"]]) qc.invalidateQueries({ queryKey: key });
+  for (const key of [["transaksi"], ["ringkasan"], ["periode"], ["akun"], ["tabungan"], ["berulang"], ["dashboard"], ["split"]]) qc.invalidateQueries({ queryKey: key });
 }

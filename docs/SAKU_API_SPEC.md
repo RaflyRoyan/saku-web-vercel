@@ -182,7 +182,7 @@ Aplikasi **gagal start** dengan pesan jelas kalau env wajib kosong.
 | B | user_id | teks | |
 | C | nama | teks | 1–40 karakter, unik per user + tipe (di antara kategori aktif) |
 | D | tipe | teks | `masuk` / `keluar` |
-| E | kode_sistem | teks | kosong, `BIAYA_ADMIN` (keluar), atau `TARIK_TABUNGAN` (masuk). **Kategori sistem tidak bisa dinonaktifkan, diganti tipenya, atau dibuat manual.** |
+| E | kode_sistem | teks | kosong, `BIAYA_ADMIN` (keluar), `TARIK_TABUNGAN` (masuk), atau `PATUNGAN` (masuk, pelunasan split bill §7.9; dibuat otomatis saat pertama dipakai kalau belum ada). **Kategori sistem tidak bisa dinonaktifkan, diganti tipenya, atau dibuat manual.** |
 | F | aktif | boolean | |
 | G–J | audit | | |
 | J | kelompok_id | teks | ID `KelompokKategori`. Hanya tipe `keluar`; kosong = kelompok **Lainnya**. Ditaruh setelah audit supaya kolom lama tidak bergeser |
@@ -309,6 +309,63 @@ Tepat satu dari `kelompok_id` / `kategori_id` terisi; unik per (periode_id, kelo
 | I | transaksi_id | teks | tarik: ID transaksi `masuk` TARIK_TABUNGAN yang dibuat otomatis |
 | J–M | audit | | |
 | N | diteruskan | angka | setor: bagian sisa akun yang diteruskan ke periode baru (bukan ditabung). Kosong = 0. Ditaruh setelah audit supaya kolom lama tidak bergeser |
+
+**`SplitBill`** (§7.9)
+
+| # | Kolom | Tipe | Aturan |
+|---|---|---|---|
+| A | id | teks | `SB-…` |
+| B | user_id | teks | |
+| C | tanggal | tanggal | tanggal struk = tanggal transaksi keluar |
+| D | nama | teks | 1–60 karakter |
+| E | akun_id | teks | akun pembayar |
+| F | kategori_id | teks | kategori keluar |
+| G | akun_terima_id | teks | akun tujuan pemasukan dari peserta |
+| H | pajak | angka | ≥ 0 |
+| I | servis | angka | ≥ 0 |
+| J | diskon | angka | ≥ 0 |
+| K | total | angka | Σ harga item + pajak + servis − diskon, > 0 |
+| L | transaksi_id | teks | transaksi `keluar` sebesar total |
+| M–P | audit | | |
+
+**`SplitItem`**
+
+| # | Kolom | Tipe | Aturan |
+|---|---|---|---|
+| A | id | teks | `SI-…` |
+| B | user_id | teks | |
+| C | split_id | teks | |
+| D | nama | teks | |
+| E | qty | angka | ≥ 1 (informasi) |
+| F | harga | angka | harga total baris, > 0 |
+| G | peserta | teks | ID `SplitPeserta` pemilik, dipisah koma |
+| H | urutan | angka | |
+| I–L | audit | | |
+
+**`SplitPeserta`**
+
+| # | Kolom | Tipe | Aturan |
+|---|---|---|---|
+| A | id | teks | `SP-…` |
+| B | user_id | teks | |
+| C | split_id | teks | |
+| D | nama | teks | unik per split (tanpa beda huruf besar/kecil) |
+| E | saya | boolean | tepat 1 per split |
+| F | nominal | angka | bagian peserta (§7.9) |
+| G | lunas | boolean | `saya` selalu TRUE |
+| H | transaksi_id | teks | transaksi `masuk` PATUNGAN saat lunas |
+| I | urutan | angka | |
+| J–M | audit | | |
+
+**`Pengaturan`** (per pengguna)
+
+| # | Kolom | Tipe | Aturan |
+|---|---|---|---|
+| A | id | teks | `PG-…` |
+| B | user_id | teks | |
+| C | kunci | teks | unik per pengguna. Saat ini: `qris` |
+| D | nilai | teks | `qris`: payload QRIS statis (EMV) |
+| E–H | audit | | |
 
 ---
 
@@ -465,6 +522,17 @@ Untuk tanggal acuan `hari` (default hari ini, WIB):
 - Transaksi yang melewati anggaran **tidak diblokir**. `POST/PUT /api/transaksi` dan `POST /api/berulang/{id}/konfirmasi` menambah `peringatan[]`: `"Anggaran Kopi terlewati Rp 10.000 (terpakai Rp 60.000 dari Rp 50.000)."` (juga untuk kategori induk).
 - Periode baru: `salinAnggaran: true` di `POST /api/periode/mulai` menyalin anggaran periode sebelumnya (hanya kategori/kelompok yang masih aktif). Default tidak disalin.
 
+### 7.9 Split bill
+
+- Pengguna menalangi satu struk lalu menagih bagian peserta lain. Saat dibuat: 1 transaksi `keluar` sebesar `total` dari `akun_id` (deskripsi = nama split), peringatan saldo/anggaran seperti transaksi biasa.
+- **Bagian peserta**: harga tiap item dibagi rata antar pemiliknya; pajak + servis − diskon dibagi sebanding subtotal masing-masing (faktor `total / Σ harga`). Dibulatkan ke rupiah, sisa pembulatan ke peserta `saya`, sehingga Σ bagian = total.
+- Validasi (400 per field): min 1 item; tiap item min 1 pemilik yang valid (`items.{i}.peserta`); min 2 peserta, tepat 1 `saya` (`peserta`); nama dobel atau peserta tanpa item (`peserta.{i}.nama`); total ≤ 0 (`diskon`). Akun pembayar & penerima mengikuti aturan akun §7.1; kategori harus `keluar`.
+- **Lunas**: centang = transaksi `masuk` kategori `PATUNGAN` ke `akun_terima_id`, tanggal default hari ini, deskripsi `"Patungan {split} — {peserta}"`. Uncentang = transaksi itu dihapus. Idempoten. Peserta `saya` → 422.
+- **Edit**: peserta lama dicocokkan lewat `id`; peserta lunas tidak boleh dihapus → 422. Item diganti semua. Transaksi keluar dan transaksi masuk peserta lunas ikut diperbarui (nominal, akun penerima, deskripsi).
+- **Hapus**: split + item + peserta + transaksi keluar + semua transaksi masuknya.
+- Transaksi milik split hanya bisa diubah lewat split bill: `PUT/DELETE /api/transaksi/{id}` → 409 `"Transaksi ini bagian dari split bill {nama}. Ubah lewat halaman Split Bill."`
+- **QRIS**: pengguna menyimpan QRIS statis (merchant) di Pengaturan. Validasi: TLV EMV, `00=01`, `58=ID`, penanda `ID.CO.QRIS` di tag 26–51, CRC16-CCITT tag `63`. Kartu tagihan dibuat di browser: tag `01` → `12`, tag `54` = nominal peserta, CRC dihitung ulang. OCR struk (Tesseract.js) dan gambar kartu dikerjakan di browser; foto struk tidak dikirim ke server.
+
 ---
 
 ## 8. Akses Google Sheets
@@ -606,6 +674,20 @@ Respons kategori memuat `kelompokId` + `kelompokNama` (pemasukan: `null`).
 | GET | `/api/tabungan` | | `{ total, perAkun: [{ akunId, nama, setor, tarik, saldo }], riwayat: [...] }` |
 | POST | `/api/tabungan/tarik` | `{ tanggal?, akunId, nominal, keterangan }` | §7.6 |
 | DELETE | `/api/tabungan/{id}` | | Hanya `tarik` di periode aktif |
+
+### 10.8a Split bill & pengaturan
+
+| Method | Path | Body | Keterangan |
+|---|---|---|---|
+| GET | `/api/split` | | `[{ id, nama, tanggal, total, jumlahPeserta, belumLunas: { jumlah, nominal } }]` |
+| GET | `/api/split/nama` | | Nama peserta yang pernah dipakai |
+| GET | `/api/split/{id}` | | Detail + `items[]` + `peserta[]` |
+| POST | `/api/split` | `{ nama, tanggal?, akunId, kategoriId, akunTerimaId, pajak?, servis?, diskon?, peserta: [{ id?, nama, saya }], items: [{ nama, qty, harga, peserta: indeks[] }] }` | 201 + `peringatan[]` (§7.9) |
+| PUT | `/api/split/{id}` | sama dengan POST | §7.9 Edit |
+| DELETE | `/api/split/{id}` | | 204 |
+| PUT | `/api/split/{id}/peserta/{pid}/lunas` | `{ lunas, tanggal? }` | Detail terbaru |
+| GET | `/api/pengaturan/qris` | | `{ payload, merchant, kota }` atau `null` |
+| PUT | `/api/pengaturan/qris` | `{ payload | null }` | 400 `payload` kalau bukan QRIS |
 
 ### 10.9 Ringkasan & dashboard
 

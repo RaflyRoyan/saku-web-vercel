@@ -4,8 +4,16 @@ import { AppError } from "../server/common/errors";
 import { generateId } from "../server/common/id";
 import { withRetry } from "../server/sheets/google-store";
 import { MemorySheetStore } from "../server/sheets/memory-store";
-import { columnLetter, lastColumn } from "../server/sheets/schema";
+import { columnLetter, headerOf, ID_PREFIX, lastColumn, SHEET_NAMES } from "../server/sheets/schema";
 import { SheetMissingError } from "../server/sheets/store";
+
+describe("schema split bill", () => {
+  it("4 sheet baru dengan prefix ID & urutan kolom", () => {
+    for (const s of ["SplitBill", "SplitItem", "SplitPeserta", "Pengaturan"]) expect(SHEET_NAMES).toContain(s);
+    expect(headerOf("SplitPeserta")).toEqual(["id", "user_id", "split_id", "nama", "saya", "nominal", "lunas", "transaksi_id", "urutan", "created_by", "created_at", "updated_by", "updated_at"]);
+    expect(ID_PREFIX).toMatchObject({ SplitBill: "SB", SplitItem: "SI", SplitPeserta: "SP", Pengaturan: "PG" });
+  });
+});
 
 describe("MemorySheetStore", () => {
   it("append, update, delete memakai nomor baris", async () => {
