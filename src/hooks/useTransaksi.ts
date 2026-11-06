@@ -79,5 +79,5 @@ export function useTransaksi(id: string | undefined) {
 
 /** Setelah transaksi/periode berubah: saldo, ringkasan, dan riwayat ikut berubah. */
 export function invalidateKeuangan(qc: QueryClient) {
-  for (const key of [["transaksi"], ["ringkasan"], ["periode"], ["akun"], ["tabungan"], ["berulang"], ["dashboard"], ["split"]]) qc.invalidateQueries({ queryKey: key });
+  for (const key of [["transaksi"], ["ringkasan"], ["periode"], ["akun"], ["tabungan"], ["berulang"], ["dashboard"], ["split"], ["tagihan-qris"]]) qc.invalidateQueries({ queryKey: key });
 }

@@ -481,6 +481,42 @@ export const KATALOG: Endpoint[] = [
     respons: "`{ payload, merchant, kota }` atau `null`",
   },
 
+  // ── Tagihan QRIS
+  { id: "tagihan-qris-list", grup: "Tagihan QRIS", method: "GET", path: "/tagihan-qris", judul: "Daftar tagihan QRIS", ket: "Terbaru dulu, termasuk yang sudah lunas.", akses: "login", respons: "`[{ id, tanggal, nominal, keterangan, akunId, akunNama, kategoriId, kategoriNama, lunas, transaksiId }]`" },
+  {
+    id: "tagihan-qris-post",
+    grup: "Tagihan QRIS",
+    method: "POST",
+    path: "/tagihan-qris",
+    judul: "Buat tagihan QRIS",
+    ket: "Tersimpan belum lunas. Akun & kategori dipakai saat ditandai lunas.",
+    akses: "login",
+    field: [
+      { nama: "nominal", ket: "Rupiah, > 0", wajib: true },
+      { nama: "keterangan", ket: "Maks. 100 karakter" },
+      { nama: "akunId", ket: "Akun penerima", wajib: true },
+      { nama: "kategoriId", ket: "Kategori pemasukan", wajib: true },
+    ],
+    contoh: { nominal: 25000, keterangan: "Kaos L", akunId: "AK-…", kategoriId: "KT-…" },
+    respons: "201 + tagihan",
+  },
+  {
+    id: "tagihan-qris-lunas",
+    grup: "Tagihan QRIS",
+    method: "PUT",
+    path: "/tagihan-qris/{id}/lunas",
+    judul: "Tandai lunas / belum",
+    ket: "Lunas = transaksi masuk. Batal lunas = transaksi dihapus. Idempoten.",
+    akses: "login",
+    field: [
+      { nama: "lunas", ket: "true/false", wajib: true },
+      { nama: "tanggal", ket: "yyyy-MM-dd, default hari ini" },
+    ],
+    contoh: { lunas: true },
+    respons: "Tagihan terbaru.",
+  },
+  { id: "tagihan-qris-delete", grup: "Tagihan QRIS", method: "DELETE", path: "/tagihan-qris/{id}", judul: "Hapus tagihan", ket: "Transaksi masuknya ikut terhapus.", akses: "login", respons: "204" },
+
   // ── Pengguna
   { id: "pengguna-list", grup: "Pengguna", method: "GET", path: "/pengguna", judul: "Daftar pengguna", ket: "", akses: "admin", respons: "`[{ id, username, nama, peran, aktif, lastLogin }]`" },
   {

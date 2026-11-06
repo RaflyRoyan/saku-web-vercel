@@ -367,6 +367,21 @@ Tepat satu dari `kelompok_id` / `kategori_id` terisi; unik per (periode_id, kelo
 | D | nilai | teks | `qris`: payload QRIS statis (EMV) |
 | E–H | audit | | |
 
+**`TagihanQris`** (§7.9a)
+
+| # | Kolom | Tipe | Aturan |
+|---|---|---|---|
+| A | id | teks | `TQ-…` |
+| B | user_id | teks | |
+| C | tanggal | tanggal | hari QR dibuat (WIB) |
+| D | nominal | angka | > 0 |
+| E | keterangan | teks | maks. 100 karakter, boleh kosong |
+| F | akun_id | teks | akun penerima pemasukan |
+| G | kategori_id | teks | kategori `masuk` |
+| H | lunas | boolean | |
+| I | transaksi_id | teks | transaksi `masuk` saat lunas |
+| J–M | audit | | |
+
 ---
 
 ## 6. Autentikasi & otorisasi
@@ -533,6 +548,13 @@ Untuk tanggal acuan `hari` (default hari ini, WIB):
 - Transaksi milik split hanya bisa diubah lewat split bill: `PUT/DELETE /api/transaksi/{id}` → 409 `"Transaksi ini bagian dari split bill {nama}. Ubah lewat halaman Split Bill."`
 - **QRIS**: pengguna menyimpan QRIS statis (merchant) di Pengaturan. Validasi: TLV EMV, `00=01`, `58=ID`, penanda `ID.CO.QRIS` di tag 26–51, CRC16-CCITT tag `63`. Kartu tagihan dibuat di browser: tag `01` → `12`, tag `54` = nominal peserta, CRC dihitung ulang. OCR struk (Tesseract.js) dan gambar kartu dikerjakan di browser; foto struk tidak dikirim ke server.
 
+### 7.9a Tagihan QRIS
+
+- Halaman Terima QRIS: pengguna mengisi nominal, keterangan, akun penerima, dan kategori `masuk`. Saat "Buat QRIS", tagihan langsung tersimpan (belum lunas) supaya halaman boleh ditutup sebelum dibayar. Akun & kategori divalidasi dengan aturan transaksi masuk (§7.1).
+- **Lunas**: transaksi `masuk` ke akun & kategori tagihan, tanggal default hari ini, deskripsi = keterangan atau `"Pembayaran QRIS"`. Batal lunas = transaksi itu dihapus. Idempoten.
+- **Hapus**: tagihan + transaksi masuknya (kalau sudah lunas).
+- Transaksi dari tagihan hanya bisa diubah lewat halaman Terima QRIS: `PUT/DELETE /api/transaksi/{id}` → 409 `"Transaksi ini dari tagihan QRIS. Ubah lewat halaman Terima QRIS."`
+
 ---
 
 ## 8. Akses Google Sheets
@@ -688,6 +710,10 @@ Respons kategori memuat `kelompokId` + `kelompokNama` (pemasukan: `null`).
 | PUT | `/api/split/{id}/peserta/{pid}/lunas` | `{ lunas, tanggal? }` | Detail terbaru |
 | GET | `/api/pengaturan/qris` | | `{ payload, merchant, kota }` atau `null` |
 | PUT | `/api/pengaturan/qris` | `{ payload | null }` | 400 `payload` kalau bukan QRIS |
+| GET | `/api/tagihan-qris` | | `[{ id, tanggal, nominal, keterangan, akunId, akunNama, kategoriId, kategoriNama, lunas, transaksiId }]`, terbaru dulu |
+| POST | `/api/tagihan-qris` | `{ nominal, keterangan?, akunId, kategoriId }` | 201 + tagihan (§7.9a) |
+| PUT | `/api/tagihan-qris/{id}/lunas` | `{ lunas, tanggal? }` | Tagihan terbaru |
+| DELETE | `/api/tagihan-qris/{id}` | | 204 |
 
 ### 10.9 Ringkasan & dashboard
 

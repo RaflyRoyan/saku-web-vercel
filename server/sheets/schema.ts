@@ -190,6 +190,19 @@ export const SCHEMA = {
     ["nilai", "teks"],
     ...AUDIT,
   ],
+  // Tagihan QRIS bernominal (halaman Terima QRIS). Tersimpan saat QR dibuat, lunas = transaksi masuk.
+  TagihanQris: [
+    ["id", "teks"],
+    ["user_id", "teks"],
+    ["tanggal", "tanggal"],
+    ["nominal", "angka"],
+    ["keterangan", "teks"],
+    ["akun_id", "teks"],
+    ["kategori_id", "teks"],
+    ["lunas", "boolean"],
+    ["transaksi_id", "teks"],
+    ...AUDIT,
+  ],
 } as const satisfies Record<string, readonly Kolom[]>;
 
 export type SheetName = keyof typeof SCHEMA;
@@ -213,6 +226,7 @@ export const ID_PREFIX = {
   SplitItem: "SI",
   SplitPeserta: "SP",
   Pengaturan: "PG",
+  TagihanQris: "TQ",
 } as const satisfies Partial<Record<SheetName, string>>;
 
 interface TipeTs {

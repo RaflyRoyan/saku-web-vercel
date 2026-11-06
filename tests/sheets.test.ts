@@ -11,7 +11,8 @@ describe("schema split bill", () => {
   it("4 sheet baru dengan prefix ID & urutan kolom", () => {
     for (const s of ["SplitBill", "SplitItem", "SplitPeserta", "Pengaturan"]) expect(SHEET_NAMES).toContain(s);
     expect(headerOf("SplitPeserta")).toEqual(["id", "user_id", "split_id", "nama", "saya", "nominal", "lunas", "transaksi_id", "urutan", "created_by", "created_at", "updated_by", "updated_at"]);
-    expect(ID_PREFIX).toMatchObject({ SplitBill: "SB", SplitItem: "SI", SplitPeserta: "SP", Pengaturan: "PG" });
+    expect(ID_PREFIX).toMatchObject({ SplitBill: "SB", SplitItem: "SI", SplitPeserta: "SP", Pengaturan: "PG", TagihanQris: "TQ" });
+    expect(headerOf("TagihanQris")).toEqual(["id", "user_id", "tanggal", "nominal", "keterangan", "akun_id", "kategori_id", "lunas", "transaksi_id", "created_by", "created_at", "updated_by", "updated_at"]);
   });
 });
 

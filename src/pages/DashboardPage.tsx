@@ -3,6 +3,7 @@ import { AlarmClock, ChevronRight, PiggyBank, QrCode, Receipt, ReceiptText, Sett
 import { AkunIcon } from "../components/keuangan/AkunIcon";
 import { KartuAnggaran } from "../components/keuangan/KartuAnggaran";
 import { KartuSplit } from "../components/keuangan/KartuSplit";
+import { KartuTagihanQris } from "../components/keuangan/KartuTagihanQris";
 import { KomposisiKategori } from "../components/keuangan/KomposisiKategori";
 import { LanggananAksi } from "../components/keuangan/LanggananAksi";
 import { PeriodeKosong } from "../components/keuangan/PeriodeKosong";
@@ -113,6 +114,7 @@ export default function DashboardPage() {
 
         <KartuAnggaran data={anggaran} />
         <KartuSplit />
+        <KartuTagihanQris />
 
         {pengingat.length > 0 && (
           <section aria-labelledby="pengingat">

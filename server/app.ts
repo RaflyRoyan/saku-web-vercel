@@ -16,6 +16,7 @@ import { pengguna } from "./routes/pengguna.js";
 import { pengaturan } from "./routes/pengaturan.js";
 import { periode } from "./routes/periode.js";
 import { split } from "./routes/split.js";
+import { tagihanQris } from "./routes/tagihan-qris.js";
 import { tabungan } from "./routes/tabungan.js";
 import { transaksi } from "./routes/transaksi.js";
 import type { SheetStore } from "./sheets/store.js";
@@ -70,6 +71,7 @@ export function createApp(deps: Partial<AppDeps> = {}) {
   app.route("/dashboard", dashboard);
   app.route("/split", split);
   app.route("/pengaturan", pengaturan);
+  app.route("/tagihan-qris", tagihanQris);
 
   app.notFound((c) => problem(c, 404, "Endpoint tidak ditemukan."));
   app.onError((err, c) => problemFromError(c, err));

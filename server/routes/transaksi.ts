@@ -7,6 +7,7 @@ import { findOwned, newId, newRow, rowsOf, updatedRow } from "../repositories/ro
 import { peringatanAnggaran } from "../services/anggaran.js";
 import { kelompokIdDari } from "../services/kelompok.js";
 import { assertBukanSplit } from "../services/split.js";
+import { assertBukanTagihanQris } from "../services/tagihan-qris.js";
 import { periodeAktif } from "../services/saldo.js";
 import { rencanaSetorTerdampak, simpanSetor } from "../services/tabungan.js";
 import {
@@ -22,8 +23,8 @@ import type { SheetData } from "../sheets/store.js";
 const SHEETS = ["Akun", "AkunPengguna", "Kategori", "KelompokKategori", "Periode", "SaldoAwal", "Transaksi", "Tabungan"] as const;
 /** POST/PUT juga butuh Anggaran untuk peringatan anggaran terlewati. */
 const SHEETS_TULIS = [...SHEETS, "Anggaran"] as const;
-/** PUT/DELETE: transaksi milik split bill dikunci. */
-const SHEETS_SPLIT = ["SplitBill", "SplitPeserta"] as const;
+/** PUT/DELETE: transaksi milik split bill & tagihan QRIS dikunci. */
+const SHEETS_SPLIT = ["SplitBill", "SplitPeserta", "TagihanQris"] as const;
 
 function parseAll(data: Record<(typeof SHEETS)[number], SheetData>) {
   return {
@@ -127,6 +128,7 @@ transaksi.put("/:id", jsonBody(transaksiBody), async (c) => {
   const target = findOwned(s.transaksi, c.req.param("id"), uid);
   assertBukanTarik(target.data, s.kategori);
   assertBukanSplit(target.data, rowsOf(data, "SplitBill"), rowsOf(data, "SplitPeserta"));
+  assertBukanTagihanQris(target.data, rowsOf(data, "TagihanQris"));
   const kolom = resolveTransaksi(body, s, uid, c.var.clock, target.data);
 
   const values = updatedRow("Transaksi", target.data, kolom, uid, c.var.clock);
@@ -149,6 +151,7 @@ transaksi.delete("/:id", async (c) => {
   const target = findOwned(s.transaksi, c.req.param("id"), uid);
   assertBukanTarik(target.data, s.kategori);
   assertBukanSplit(target.data, rowsOf(data, "SplitBill"), rowsOf(data, "SplitPeserta"));
+  assertBukanTagihanQris(target.data, rowsOf(data, "TagihanQris"));
 
   const after = s.transaksi.filter((r) => r.row !== target.row);
   const setor = rencanaSetorTerdampak([target.data.periode_id], s.periode, s.saldoAwal, after, s.tabungan, uid, c.var.clock);
