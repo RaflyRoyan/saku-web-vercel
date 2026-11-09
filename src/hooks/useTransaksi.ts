@@ -1,5 +1,5 @@
 import { useInfiniteQuery, useQuery, type QueryClient } from "@tanstack/react-query";
-import { api } from "../lib/api";
+import { api, send } from "../lib/api";
 
 export type TipeTransaksi = "keluar" | "masuk" | "transfer";
 
@@ -19,6 +19,7 @@ export interface Transaksi {
   biayaAdmin: number;
   deskripsi: string;
   berulangId: string | null;
+  label: string | null;
   createdAt: string | null;
 }
 
@@ -37,6 +38,7 @@ export interface FilterTransaksi {
   /** Rentang tanggal yyyy-MM-dd (inklusif). */
   dari?: string;
   sampai?: string;
+  label?: string;
 }
 
 interface Halaman {
@@ -50,7 +52,40 @@ export const transaksiKeys = {
   all: ["transaksi"] as const,
   list: (f: FilterTransaksi) => ["transaksi", "list", f] as const,
   detail: (id: string) => ["transaksi", id] as const,
+  label: ["transaksi", "label"] as const,
+  ringkasanLabel: (label: string) => ["transaksi", "label", "ringkasan", label] as const,
 };
+
+export interface LabelDipakai {
+  label: string;
+  jumlah: number;
+}
+
+export interface RingkasanLabel {
+  label: string;
+  jumlah: number;
+  masuk: number;
+  keluar: number;
+  dari: string | null;
+  sampai: string | null;
+  perKategori: { kategoriId: string; kategoriNama: string; nominal: number }[];
+}
+
+/** Label yang pernah dipakai, paling sering dulu. */
+export function useLabelList() {
+  return useQuery({ queryKey: transaksiKeys.label, queryFn: () => api<LabelDipakai[]>("/transaksi/label") });
+}
+
+export function useRingkasanLabel(label: string) {
+  return useQuery({
+    queryKey: transaksiKeys.ringkasanLabel(label),
+    queryFn: () => api<RingkasanLabel>(`/transaksi/label/ringkasan?${new URLSearchParams({ label })}`),
+    enabled: Boolean(label),
+  });
+}
+
+/** Beri label banyak transaksi sekaligus. null = hapus label. */
+export const setLabelTransaksi = (ids: string[], label: string | null) => send<{ label: string | null; jumlah: number }>("PUT", "/transaksi/label", { ids, label });
 
 function query(f: FilterTransaksi, halaman: number, ukuran: number) {
   const params = new URLSearchParams({ halaman: String(halaman), ukuran: String(ukuran) });

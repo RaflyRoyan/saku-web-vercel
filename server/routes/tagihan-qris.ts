@@ -120,7 +120,7 @@ tagihanQris.put(
         clock,
       );
       const trId = newId("Transaksi", s.transaksi);
-      const baru = { id: trId, user_id: uid, ...kolom, berulang_id: "" };
+      const baru = { id: trId, user_id: uid, ...kolom, berulang_id: "", label: "" };
       const after = [...s.transaksi, { row: 0, data: { ...baru, created_by: uid, created_at: nowWibIso(clock), updated_by: "", updated_at: null } }];
       const setor = rencanaSetorTerdampak([kolom.periode_id], s.periode, s.saldoAwal, after, s.tabungan, uid, clock);
       const changes = { lunas: true, transaksi_id: trId };

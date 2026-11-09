@@ -5,6 +5,7 @@ import { formatRupiah } from "../common/format.js";
 import type { ParsedRow } from "../repositories/rows.js";
 import { pesanBelumDipilih, pilihanAkun } from "./akun-pengguna.js";
 import { addDays, periodeUntukTanggal } from "./periode.js";
+import { labelSchema } from "./label.js";
 import { saldoPerAkun } from "./saldo.js";
 
 const tanggalSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, { error: "Format tanggal harus yyyy-MM-dd." });
@@ -28,6 +29,8 @@ export const transaksiBody = z.object({
     .max(MAKS_NOMINAL, { error: "Biaya admin terlalu besar." })
     .optional(),
   deskripsi: z.string().trim().max(200, { error: "Deskripsi maksimal 200 karakter." }).optional(),
+  /** Tidak dikirim = label lama tetap (edit). Kosong/null = tanpa label. */
+  label: labelSchema.nullable().optional(),
 });
 
 export type TransaksiBody = z.infer<typeof transaksiBody>;
@@ -49,6 +52,7 @@ export interface TransaksiDto {
   biayaAdmin: number;
   deskripsi: string;
   berulangId: string | null;
+  label: string | null;
   createdAt: string | null;
 }
 
@@ -72,6 +76,7 @@ export function transaksiMapper(akun: ParsedRow<"Akun">[], kategori: ParsedRow<"
     biayaAdmin: t.biaya_admin ?? 0,
     deskripsi: t.deskripsi,
     berulangId: t.berulang_id || null,
+    label: t.label || null,
     createdAt: t.created_at,
   });
 }

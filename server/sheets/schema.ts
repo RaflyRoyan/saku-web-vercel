@@ -103,6 +103,8 @@ export const SCHEMA = {
     ["deskripsi", "teks"],
     ["berulang_id", "teks"],
     ...AUDIT,
+    // Ditambahkan setelah audit supaya kolom data lama tidak bergeser. Label bebas, mis. "Liburan Jogja". Kosong = tanpa label.
+    ["label", "teks"],
   ],
   Berulang: [
     ["id", "teks"],

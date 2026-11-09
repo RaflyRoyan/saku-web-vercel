@@ -184,7 +184,7 @@ split.post("/", jsonBody(splitBody), async (c) => {
   const pesertaId = idBaru("SplitPeserta", s.peserta, body.peserta.length);
   const itemId = idBaru("SplitItem", s.item, body.items.length);
 
-  const keluar = { id: trId, user_id: uid, ...kolomTr, berulang_id: "" };
+  const keluar = { id: trId, user_id: uid, ...kolomTr, berulang_id: "", label: "" };
   const fullKeluar = { ...keluar, created_by: uid, created_at: nowWibIso(clock), updated_by: "", updated_at: null };
   const after = [...s.transaksi, { row: 0, data: fullKeluar }];
   const setor = rencanaSetorTerdampak([kolomTr.periode_id], s.periode, s.saldoAwal, after, s.tabungan, uid, clock);
@@ -286,7 +286,7 @@ split.put("/:id", jsonBody(splitBody), async (c) => {
     transaksi = transaksi.map((r) => (r.row === keluarLama.row ? { row: r.row, data: { ...r.data, ...kolomTr } } : r));
   } else {
     [trKeluarId] = idBaru("Transaksi", s.transaksi, 1);
-    const baru = { id: trKeluarId, user_id: uid, ...kolomTr, berulang_id: "" };
+    const baru = { id: trKeluarId, user_id: uid, ...kolomTr, berulang_id: "", label: "" };
     push("Transaksi", newRow("Transaksi", baru, uid, clock));
     transaksi.push({ row: 0, data: { ...baru, created_by: uid, created_at: now, updated_by: "", updated_at: null } });
   }
@@ -473,7 +473,7 @@ split.put(
         throw e;
       }
       const [trId] = idBaru("Transaksi", s.transaksi, 1);
-      const baru = { id: trId, user_id: uid, ...kolom, berulang_id: "" };
+      const baru = { id: trId, user_id: uid, ...kolom, berulang_id: "", label: "" };
       const after = [...s.transaksi, { row: 0, data: { ...baru, created_by: uid, created_at: nowWibIso(clock), updated_by: "", updated_at: null } }];
       const setor = rencanaSetorTerdampak([kolom.periode_id], s.periode, s.saldoAwal, after, s.tabungan, uid, clock);
       const changes = { lunas: true, transaksi_id: trId };

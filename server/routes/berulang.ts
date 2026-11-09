@@ -244,7 +244,7 @@ berulang.post(
       uid,
       clock,
     );
-    const baru = { id: newId("Transaksi", s.transaksi), user_id: uid, ...kolomTr, berulang_id: b.id };
+    const baru = { id: newId("Transaksi", s.transaksi), user_id: uid, ...kolomTr, berulang_id: b.id, label: "" };
     const full = { ...baru, created_by: uid, created_at: nowWibIso(clock), updated_by: "", updated_at: null };
     const after = [...s.transaksi, { row: 0, data: full }];
     const setor = rencanaSetorTerdampak([kolomTr.periode_id], s.periode, s.saldoAwal, after, s.tabungan, uid, clock);

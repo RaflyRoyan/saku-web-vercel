@@ -162,6 +162,7 @@ tabungan.post(
       biaya_admin: 0,
       deskripsi: keterangan,
       berulang_id: "",
+      label: "",
     };
     const store = c.var.store();
     await store.append("Tabungan", [newRow("Tabungan", tarik, uid, clock)]);

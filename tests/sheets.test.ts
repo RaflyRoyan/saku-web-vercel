@@ -114,7 +114,7 @@ describe("id & clock", () => {
     expect(columnLetter(0)).toBe("A");
     expect(columnLetter(25)).toBe("Z");
     expect(columnLetter(26)).toBe("AA");
-    expect(lastColumn("Transaksi")).toBe("P");
+    expect(lastColumn("Transaksi")).toBe("Q");
     expect(lastColumn("Pengguna")).toBe("N");
   });
 });

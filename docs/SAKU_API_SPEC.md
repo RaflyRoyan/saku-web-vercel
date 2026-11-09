@@ -266,6 +266,7 @@ Tepat satu dari `kelompok_id` / `kategori_id` terisi; unik per (periode_id, kelo
 | K | deskripsi | teks | maks 200 karakter |
 | L | berulang_id | teks | diisi oleh endpoint konfirmasi langganan |
 | M–P | audit | | |
+| Q | label | teks | ditambahkan setelah audit. Label bebas (mis. `Liburan Jogja`), maks 50 karakter, kosong = tanpa label. Spasi dirapikan; kalau label yang sama (beda huruf besar/kecil) sudah dipakai pengguna, ejaan lama yang dipakai |
 
 **`Berulang`**
 
@@ -671,10 +672,13 @@ Respons kategori memuat `kelompokId` + `kelompokNama` (pemasukan: `null`).
 
 | Method | Path | Body / Query | Keterangan |
 |---|---|---|---|
-| GET | `/api/transaksi` | `periodeId` (default aktif), `akunId`, `tipe`, `kategoriId`, `q` (cari deskripsi), `dari`, `sampai`, `halaman`=1, `ukuran`=50 (maks 200) | Urut tanggal desc, lalu created_at desc. Response `{ data, total, halaman, ukuran }`. **Filter `akunId` juga mencakup transfer dengan akun tersebut sebagai tujuan.** Setiap item disertai nama akun/kategori (denormalisasi untuk tampilan). |
+| GET | `/api/transaksi` | `periodeId` (default aktif), `akunId`, `tipe`, `kategoriId`, `q` (cari deskripsi), `dari`, `sampai`, `label` (tidak peka huruf besar/kecil), `halaman`=1, `ukuran`=50 (maks 200) | Urut tanggal desc, lalu created_at desc. Response `{ data, total, halaman, ukuran }`. **Filter `akunId` juga mencakup transfer dengan akun tersebut sebagai tujuan.** Setiap item disertai nama akun/kategori (denormalisasi untuk tampilan). |
 | GET | `/api/transaksi/{id}` | | |
-| POST | `/api/transaksi` | `{ tanggal?, tipe, akunId, akunTujuanId?, kategoriId?, nominal, biayaAdmin?, deskripsi? }` | 201. Response menyertakan `peringatan[]` |
-| PUT | `/api/transaksi/{id}` | Sama dengan POST | Aturan §7.5 dan §7.6 |
+| POST | `/api/transaksi` | `{ tanggal?, tipe, akunId, akunTujuanId?, kategoriId?, nominal, biayaAdmin?, deskripsi?, label? }` | 201. Response menyertakan `peringatan[]` |
+| PUT | `/api/transaksi/{id}` | Sama dengan POST | Aturan §7.5 dan §7.6. `label` tidak dikirim = label lama tetap; `null`/kosong = hapus label |
+| GET | `/api/transaksi/label` | | `[{ label, jumlah }]`, paling sering dulu |
+| GET | `/api/transaksi/label/ringkasan` | `label` (wajib) | `{ label, jumlah, masuk, keluar, dari, sampai, perKategori: [{ kategoriId, kategoriNama, nominal }] }` lintas periode; transfer tidak dihitung; `perKategori` hanya pengeluaran |
+| PUT | `/api/transaksi/label` | `{ ids: string[] (1–500), label: string | null }` | Beri/hapus label banyak transaksi sekaligus (satu batchUpdate). Berlaku juga untuk transaksi split bill, tagihan QRIS, dan tarik tabungan. ID milik pengguna lain → 404. Response `{ label, jumlah }` |
 | DELETE | `/api/transaksi/{id}` | | 204. Aturan §7.5 dan §7.6 |
 
 ### 10.7 Berulang

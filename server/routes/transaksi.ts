@@ -1,11 +1,14 @@
 import { Hono } from "hono";
+import { z } from "zod";
 import type { AppEnv } from "../app.js";
 import { loadSession, requireAuth } from "../auth/session.js";
 import { nowWibIso } from "../common/clock.js";
+import { validationError } from "../common/errors.js";
 import { jsonBody } from "../common/validation.js";
 import { findOwned, newId, newRow, rowsOf, updatedRow } from "../repositories/rows.js";
 import { peringatanAnggaran } from "../services/anggaran.js";
 import { kelompokIdDari } from "../services/kelompok.js";
+import { daftarLabel, labelFinal, labelSchema, MAKS_LABEL, ringkasanLabel, samaLabel } from "../services/label.js";
 import { assertBukanSplit } from "../services/split.js";
 import { assertBukanTagihanQris } from "../services/tagihan-qris.js";
 import { periodeAktif } from "../services/saldo.js";
@@ -18,7 +21,7 @@ import {
   transaksiMapper,
   urutTransaksi,
 } from "../services/transaksi.js";
-import type { SheetData } from "../sheets/store.js";
+import type { RowUpdate, SheetData } from "../sheets/store.js";
 
 const SHEETS = ["Akun", "AkunPengguna", "Kategori", "KelompokKategori", "Periode", "SaldoAwal", "Transaksi", "Tabungan"] as const;
 /** POST/PUT juga butuh Anggaran untuk peringatan anggaran terlewati. */
@@ -80,6 +83,7 @@ transaksi.get("/", async (c) => {
           subKelompok.has(t.kategori_id) ||
           (biayaAdminId !== undefined && subKelompok.has(biayaAdminId) && t.tipe === "transfer" && (t.biaya_admin ?? 0) > 0)) &&
         (!cari || t.deskripsi.toLowerCase().includes(cari)) &&
+        (!q.label || samaLabel(t.label, q.label)) &&
         (!q.dari || (t.tanggal ?? "") >= q.dari) &&
         (!q.sampai || (t.tanggal ?? "") <= q.sampai),
     )
@@ -93,6 +97,45 @@ transaksi.get("/", async (c) => {
   });
 });
 
+/** Label yang pernah dipakai + jumlah transaksinya (saran & filter). */
+transaksi.get("/label", async (c) => {
+  const { user, data } = await loadSession(c, ["Transaksi"]);
+  return c.json(daftarLabel(rowsOf(data, "Transaksi"), user.data.id));
+});
+
+/** Ringkasan satu label lintas periode. */
+transaksi.get("/label/ringkasan", async (c) => {
+  const label = c.req.query("label")?.trim() ?? "";
+  if (!label) throw validationError({ label: ["Label wajib diisi."] });
+  const { user, data } = await loadSession(c, ["Kategori", "Transaksi"]);
+  return c.json(ringkasanLabel(rowsOf(data, "Transaksi"), rowsOf(data, "Kategori"), user.data.id, label));
+});
+
+/** Beri/hapus label banyak transaksi sekaligus (satu batchUpdate). Transaksi split/tagihan/tarik tetap boleh: label tidak mengubah uang. */
+transaksi.put(
+  "/label",
+  jsonBody(
+    z.object({
+      ids: z.array(z.string(), { error: "Pilih minimal 1 transaksi." }).min(1, { error: "Pilih minimal 1 transaksi." }).max(500, { error: "Maksimal 500 transaksi sekaligus." }),
+      label: labelSchema.nullable(),
+    }),
+  ),
+  async (c) => {
+    const body = c.req.valid("json");
+    const { user, data } = await loadSession(c, ["Transaksi"]);
+    const uid = user.data.id;
+    const rows = rowsOf(data, "Transaksi");
+    const label = labelFinal(body.label ?? "", rows, uid);
+    if (label === null) throw validationError({ label: [`Label maksimal ${MAKS_LABEL} karakter.`] });
+    const target = [...new Set(body.ids)].map((id) => findOwned(rows, id, uid));
+    const updates: RowUpdate[] = target
+      .filter((r) => r.data.label !== label)
+      .map((r) => ({ sheet: "Transaksi", row: r.row, values: updatedRow("Transaksi", r.data, { label }, uid, c.var.clock) }));
+    if (updates.length) await c.var.store().updateRows(updates);
+    return c.json({ label: label || null, jumlah: target.length });
+  },
+);
+
 transaksi.get("/:id", async (c) => {
   const { user, data } = await loadSession(c, ["Akun", "Kategori", "Transaksi"]);
   const t = findOwned(rowsOf(data, "Transaksi"), c.req.param("id"), user.data.id);
@@ -105,8 +148,10 @@ transaksi.post("/", jsonBody(transaksiBody), async (c) => {
   const uid = user.data.id;
   const s = parseAll(data);
   const kolom = resolveTransaksi(body, s, uid, c.var.clock);
+  const label = labelFinal(body.label ?? "", s.transaksi, uid);
+  if (label === null) throw validationError({ label: [`Label maksimal ${MAKS_LABEL} karakter.`] });
 
-  const baru = { id: newId("Transaksi", s.transaksi), user_id: uid, ...kolom, berulang_id: "" };
+  const baru = { id: newId("Transaksi", s.transaksi), user_id: uid, ...kolom, berulang_id: "", label };
   const full = { ...baru, created_by: uid, created_at: nowWibIso(c.var.clock), updated_by: "", updated_at: null };
   const after = [...s.transaksi, { row: 0, data: full }];
   const setor = rencanaSetorTerdampak([kolom.periode_id], s.periode, s.saldoAwal, after, s.tabungan, uid, c.var.clock);
@@ -130,9 +175,12 @@ transaksi.put("/:id", jsonBody(transaksiBody), async (c) => {
   assertBukanSplit(target.data, rowsOf(data, "SplitBill"), rowsOf(data, "SplitPeserta"));
   assertBukanTagihanQris(target.data, rowsOf(data, "TagihanQris"));
   const kolom = resolveTransaksi(body, s, uid, c.var.clock, target.data);
+  // Label tidak dikirim → label lama tetap
+  const label = body.label === undefined ? target.data.label : labelFinal(body.label ?? "", s.transaksi, uid);
+  if (label === null) throw validationError({ label: [`Label maksimal ${MAKS_LABEL} karakter.`] });
 
-  const values = updatedRow("Transaksi", target.data, kolom, uid, c.var.clock);
-  const full = { ...target.data, ...kolom, updated_by: uid, updated_at: nowWibIso(c.var.clock) };
+  const values = updatedRow("Transaksi", target.data, { ...kolom, label }, uid, c.var.clock);
+  const full = { ...target.data, ...kolom, label, updated_by: uid, updated_at: nowWibIso(c.var.clock) };
   const after = s.transaksi.map((r) => (r.row === target.row ? { row: r.row, data: full } : r));
   // Tanggal berubah bisa memindahkan transaksi ke periode lain: hitung ulang keduanya
   const setor = rencanaSetorTerdampak([target.data.periode_id, kolom.periode_id], s.periode, s.saldoAwal, after, s.tabungan, uid, c.var.clock);

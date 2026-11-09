@@ -1,16 +1,18 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { useSearchParams } from "react-router-dom";
-import { CalendarDays, History, Search, X } from "lucide-react";
+import { CalendarDays, CheckSquare, History, Search, Tag, X } from "lucide-react";
 import PageHeader from "../components/layout/PageHeader";
 import { PeriodeKosong } from "../components/keuangan/PeriodeKosong";
-import { TransaksiGroupList } from "../components/keuangan/TransaksiItem";
+import { FormLabel } from "../components/keuangan/FormLabel";
+import { KartuRingkasanLabel } from "../components/keuangan/KartuRingkasanLabel";
+import { TransaksiGroupList, type PilihTransaksi } from "../components/keuangan/TransaksiItem";
 import { BottomSheet } from "../components/ui/BottomSheet";
 import { Button, fokus } from "../components/ui/Button";
 import { Input } from "../components/ui/Input";
 import { EmptyState, ErrorState, ListSkeleton } from "../components/ui/States";
 import { useAkun, useKategori, useKelompokKategori } from "../hooks/useMaster";
 import { usePeriodeList, usePeriodeTerpilih } from "../hooks/usePeriode";
-import { useTransaksiList } from "../hooks/useTransaksi";
+import { useLabelList, useTransaksiList } from "../hooks/useTransaksi";
 import { formatTanggal } from "../lib/format";
 
 const TIPE = [
@@ -151,10 +153,47 @@ export default function RiwayatPage() {
     kelompokId: params.get("kelompokId") ?? "",
     dari: params.get("dari") ?? "",
     sampai: params.get("sampai") ?? "",
+    label: params.get("label") ?? "",
     q,
   };
   const [pilihTanggal, setPilihTanggal] = useState(false);
   const list = useTransaksiList(filter, 50, Boolean(periodeId));
+  const labelList = useLabelList();
+  // Mode pilih banyak: null = tidak aktif
+  const [dipilih, setDipilih] = useState<Set<string> | null>(null);
+  const [beriLabel, setBeriLabel] = useState(false);
+  const items = list.data?.pages.flatMap((p) => p.data) ?? [];
+  const pilih: PilihTransaksi = {
+    ids: dipilih,
+    mulai: (id) => setDipilih(new Set([id])),
+    toggle: (id) =>
+      setDipilih((lama) => {
+        const next = new Set(lama);
+        if (next.has(id)) next.delete(id);
+        else next.add(id);
+        return next;
+      }),
+  };
+  const semuaDipilih = Boolean(dipilih && items.length && items.every((t) => dipilih.has(t.id)));
+  // Semua yang dipilih berlabel sama → isian awal form label
+  const labelDipilih = dipilih ? [...new Set(items.filter((t) => dipilih.has(t.id)).map((t) => t.label ?? ""))] : [];
+
+  // Label lintas periode: pilih label → periode "Semua"; hapus label → kembali ke periode aktif
+  const setLabel = (v: string) =>
+    setParams(
+      (p) => {
+        const next = new URLSearchParams(p);
+        if (v) {
+          next.set("label", v);
+          next.set("periode", SEMUA);
+        } else {
+          next.delete("label");
+          next.delete("periode");
+        }
+        return next;
+      },
+      { replace: true },
+    );
 
   const setFilter = (key: string, value: string) =>
     setParams(
@@ -198,14 +237,13 @@ export default function RiwayatPage() {
   else if (!periodeId) isi = <PeriodeKosong />;
   else if (list.isError) isi = <ErrorState error={list.error} onRetry={() => list.refetch()} />;
   else {
-    const items = list.data!.pages.flatMap((p) => p.data);
-    const adaFilter = filter.akunId || filter.tipe || filter.kategoriId || filter.kelompokId || filter.dari || filter.sampai || q;
+    const adaFilter = filter.akunId || filter.tipe || filter.kategoriId || filter.kelompokId || filter.dari || filter.sampai || filter.label || q;
     isi =
       items.length === 0 ? (
         <EmptyState icon={History} title={adaFilter ? "Tidak ada transaksi yang cocok." : periodeId === SEMUA ? "Belum ada transaksi." : "Belum ada transaksi di periode ini."} />
       ) : (
         <div className="flex flex-col gap-4">
-          <TransaksiGroupList items={items} />
+          <TransaksiGroupList items={items} pilih={pilih} />
           {list.hasNextPage && (
             <Button variant="secondary" loading={list.isFetchingNextPage} onClick={() => list.fetchNextPage()}>
               Muat lebih banyak
@@ -239,7 +277,21 @@ export default function RiwayatPage() {
 
   return (
     <>
-      <PageHeader title="Riwayat" />
+      <PageHeader
+        title="Riwayat"
+        action={
+          items.length > 0 &&
+          (dipilih ? (
+            <Button variant="ghost" onClick={() => setDipilih(null)}>
+              Batal
+            </Button>
+          ) : (
+            <Button variant="ghost" onClick={() => setDipilih(new Set())}>
+              <CheckSquare className="size-5" aria-hidden /> Pilih
+            </Button>
+          ))
+        }
+      />
       <div className="mb-4 flex flex-col gap-3">
         <label className="relative block">
           <span className="sr-only">Cari deskripsi</span>
@@ -280,9 +332,51 @@ export default function RiwayatPage() {
             onChange={(v) => setFilter("kategoriId", v)}
           />
           <TanggalChip dari={filter.dari} sampai={filter.sampai} onOpen={() => setPilihTanggal(true)} onClear={() => setRentang("", "")} />
+          {(labelList.data?.length || filter.label) && (
+            <FilterChip
+              label="Label"
+              value={filter.label}
+              options={[
+                ...(labelList.data ?? []).map((l) => ({ value: l.label, label: l.label })),
+                // Label di URL yang sudah tidak dipakai tetap tampil supaya bisa dihapus
+                ...(filter.label && !labelList.data?.some((l) => l.label === filter.label) ? [{ value: filter.label, label: filter.label }] : []),
+              ]}
+              onChange={setLabel}
+            />
+          )}
         </div>
       </div>
+      {filter.label && <KartuRingkasanLabel label={filter.label} />}
       {isi}
+      {dipilih && (
+        <div className="sticky bottom-20 z-10 mt-4 flex items-center gap-2 rounded-2xl border border-garis bg-white p-3 shadow-lg lg:bottom-4">
+          <div className="min-w-0 flex-1">
+            <p className="font-semibold">{dipilih.size} dipilih</p>
+            <button
+              type="button"
+              onClick={() => setDipilih(semuaDipilih ? new Set() : new Set(items.map((t) => t.id)))}
+              className={`text-sm font-semibold text-brand-700 ${fokus}`}
+            >
+              {semuaDipilih ? "Batal pilih semua" : "Pilih semua"}
+            </button>
+          </div>
+          <Button disabled={dipilih.size === 0} onClick={() => setBeriLabel(true)}>
+            <Tag className="size-5" aria-hidden /> Beri label
+          </Button>
+        </div>
+      )}
+      <BottomSheet open={beriLabel} onClose={() => setBeriLabel(false)} title="Beri label">
+        {beriLabel && dipilih && (
+          <FormLabel
+            ids={[...dipilih]}
+            labelAwal={labelDipilih.length === 1 ? labelDipilih[0] : ""}
+            onSelesai={() => {
+              setBeriLabel(false);
+              setDipilih(null);
+            }}
+          />
+        )}
+      </BottomSheet>
       <BottomSheet open={pilihTanggal} onClose={() => setPilihTanggal(false)} title="Rentang tanggal">
         {pilihTanggal && (
           <RentangForm

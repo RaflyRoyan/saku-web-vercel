@@ -15,7 +15,7 @@ import { KategoriBertingkat } from "../components/keuangan/KategoriBertingkat";
 import { akunUntukForm, useAkun, useKategori } from "../hooks/useMaster";
 import { usePeriodeList } from "../hooks/usePeriode";
 import { useToast } from "../hooks/useToast";
-import { invalidateKeuangan, useTransaksi, type TipeTransaksi, type Transaksi, type TransaksiTersimpan } from "../hooks/useTransaksi";
+import { invalidateKeuangan, useLabelList, useTransaksi, type TipeTransaksi, type Transaksi, type TransaksiTersimpan } from "../hooks/useTransaksi";
 import { ApiError, send } from "../lib/api";
 import { formatRupiah, hariIni, tambahHari } from "../lib/format";
 
@@ -36,6 +36,7 @@ interface Form {
   biayaAdmin: number | null;
   deskripsi: string;
   tanggal: string;
+  label: string;
 }
 
 /** Akun & tipe terakhir yang dipakai jadi default (02 §6.3). */
@@ -66,6 +67,7 @@ function formBaru(akunId?: string | null): Form {
     biayaAdmin: 0,
     deskripsi: "",
     tanggal: hariIni(),
+    label: "",
   };
 }
 
@@ -78,6 +80,7 @@ const dariTransaksi = (t: Transaksi): Form => ({
   biayaAdmin: t.biayaAdmin,
   deskripsi: t.deskripsi,
   tanggal: t.tanggal,
+  label: t.label ?? "",
 });
 
 export default function TransaksiFormPage() {
@@ -111,6 +114,7 @@ function TransaksiForm({ edit }: { edit?: Transaksi }) {
   const akun = useAkun(true);
   const kategori = useKategori(true);
   const periodeList = usePeriodeList();
+  const labelList = useLabelList();
 
   const set = <K extends keyof Form>(key: K, value: Form[K]) => setForm((f) => ({ ...f, [key]: value }));
   const kembali = () => (location.key === "default" ? navigate("/") : navigate(-1));
@@ -127,6 +131,7 @@ function TransaksiForm({ edit }: { edit?: Transaksi }) {
         biayaAdmin: transfer ? (form.biayaAdmin ?? 0) : 0,
         deskripsi: form.deskripsi,
         tanggal: form.tanggal,
+        label: form.label.trim() || null,
       };
       return edit
         ? send<TransaksiTersimpan>("PUT", `/transaksi/${edit.id}`, body)
@@ -299,6 +304,20 @@ function TransaksiForm({ edit }: { edit?: Transaksi }) {
         onChange={(e) => set("deskripsi", e.target.value)}
         error={fe?.deskripsi}
       />
+      <Input
+        label="Label"
+        value={form.label}
+        maxLength={50}
+        placeholder="Opsional, mis. Liburan Jogja"
+        list="saran-label"
+        onChange={(e) => set("label", e.target.value)}
+        error={fe?.label}
+      />
+      <datalist id="saran-label">
+        {(labelList.data ?? []).map((l) => (
+          <option key={l.label} value={l.label} />
+        ))}
+      </datalist>
       <Input
         label="Tanggal"
         type="date"
