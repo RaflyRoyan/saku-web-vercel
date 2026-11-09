@@ -89,10 +89,10 @@ export default function TransaksiFormPage() {
 
   if (id && detail.isPending) return <ListSkeleton rows={5} />;
   if (id && detail.isError) return <ErrorState error={detail.error} onRetry={() => detail.refetch()} />;
-  if (detail.data?.kodeSistem === "TARIK_TABUNGAN") {
+  if (detail.data?.kodeSistem === "TARIK_TABUNGAN" || detail.data?.kodeSistem === "SETOR_TABUNGAN") {
     return (
       <div className="flex flex-col items-center gap-3 py-10 text-center">
-        <p className="text-sm text-stone-700">Transaksi tarik tabungan hanya bisa diubah lewat menu Tabungan.</p>
+        <p className="text-sm text-stone-700">Transaksi {detail.data.kodeSistem === "TARIK_TABUNGAN" ? "tarik" : "setor"} tabungan hanya bisa diubah lewat menu Tabungan.</p>
         <Link to="/tabungan" className={`font-semibold text-brand-700 ${fokus}`}>
           Buka Tabungan
         </Link>

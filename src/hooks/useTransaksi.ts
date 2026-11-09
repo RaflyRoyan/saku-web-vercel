@@ -14,7 +14,7 @@ export interface Transaksi {
   akunTujuanNama: string | null;
   kategoriId: string | null;
   kategoriNama: string | null;
-  kodeSistem: "BIAYA_ADMIN" | "TARIK_TABUNGAN" | "PATUNGAN" | null;
+  kodeSistem: "BIAYA_ADMIN" | "TARIK_TABUNGAN" | "SETOR_TABUNGAN" | "PATUNGAN" | null;
   nominal: number;
   biayaAdmin: number;
   deskripsi: string;

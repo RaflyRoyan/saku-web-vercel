@@ -43,12 +43,14 @@ export function ringkasanLabel(transaksi: readonly { data: T }[], kategori: read
   const list = transaksi.map((r) => r.data).filter((t) => t.user_id === uid && t.label && samaLabel(t.label, label));
   const nama = new Map(kategori.map((k) => [k.data.id, k.data.nama]));
   const perKategori = new Map<string, number>();
+  // Setor langsung ke tabungan bukan pengeluaran
+  const setorId = kategori.find((k) => k.data.kode_sistem === "SETOR_TABUNGAN")?.data.id;
   let masuk = 0;
   let keluar = 0;
   for (const t of list) {
     const n = t.nominal ?? 0;
     if (t.tipe === "masuk") masuk += n;
-    else if (t.tipe === "keluar") {
+    else if (t.tipe === "keluar" && t.kategori_id !== setorId) {
       keluar += n;
       perKategori.set(t.kategori_id, (perKategori.get(t.kategori_id) ?? 0) + n);
     }

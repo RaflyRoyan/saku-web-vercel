@@ -38,6 +38,8 @@ export interface RingkasanAkun {
   saldoAwal: number;
   masuk: number;
   keluar: number;
+  /** Setor langsung ke tabungan (bukan pengeluaran, tetap mengurangi saldo). */
+  ditabung: number;
   biayaAdmin: number;
   transferMasuk: number;
   transferKeluar: number;

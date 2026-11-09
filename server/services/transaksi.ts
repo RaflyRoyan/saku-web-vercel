@@ -86,8 +86,9 @@ export function urutTransaksi(a: T, b: T): number {
   return (b.tanggal ?? "").localeCompare(a.tanggal ?? "") || (b.created_at ?? "").localeCompare(a.created_at ?? "");
 }
 
-export function isTarikTabungan(t: T, kategori: ParsedRow<"Kategori">[]): boolean {
-  return kategori.some((k) => k.data.id === t.kategori_id && k.data.kode_sistem === "TARIK_TABUNGAN");
+/** Transaksi milik menu Tabungan (tarik / setor langsung): hanya bisa diubah lewat menu Tabungan. */
+export function isTransaksiTabungan(t: T, kategori: ParsedRow<"Kategori">[]): boolean {
+  return kategori.some((k) => k.data.id === t.kategori_id && (k.data.kode_sistem === "TARIK_TABUNGAN" || k.data.kode_sistem === "SETOR_TABUNGAN"));
 }
 
 export interface SheetsTransaksi {
@@ -140,6 +141,7 @@ export function resolveTransaksi(
     else if (!k) err("kategoriId", "Kategori tidak ditemukan.");
     else if (k.tipe !== body.tipe) err("kategoriId", `Kategori ${k.nama} bukan kategori ${body.tipe === "masuk" ? "pemasukan" : "pengeluaran"}.`);
     else if (k.kode_sistem === "TARIK_TABUNGAN") err("kategoriId", "Kategori ini hanya untuk tarik tabungan.");
+    else if (k.kode_sistem === "SETOR_TABUNGAN") err("kategoriId", "Kategori ini hanya untuk setor tabungan.");
     else if (!k.aktif && kategoriId !== current?.kategori_id) err("kategoriId", `Kategori ${k.nama} nonaktif dan tidak bisa dipakai.`);
     if (body.biayaAdmin) err("biayaAdmin", "Biaya admin hanya untuk transfer.");
   }
@@ -177,6 +179,6 @@ export function peringatanSaldo(
   return [`Saldo ${nama} menjadi minus ${formatRupiah(-saldo)}`];
 }
 
-export function assertBukanTarik(t: T, kategori: ParsedRow<"Kategori">[]) {
-  if (isTarikTabungan(t, kategori)) throw new AppError(409, "Ubah lewat menu Tabungan.");
+export function assertBukanTabungan(t: T, kategori: ParsedRow<"Kategori">[]) {
+  if (isTransaksiTabungan(t, kategori)) throw new AppError(409, "Ubah lewat menu Tabungan.");
 }

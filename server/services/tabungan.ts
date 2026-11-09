@@ -67,12 +67,12 @@ export function rencanaSetor(
   return plan;
 }
 
-/** Saldo tabungan pengguna: Σ setor − Σ tarik. */
+/** Saldo tabungan pengguna: Σ setor (tutup periode) + Σ simpan (setor langsung) − Σ tarik. */
 export function totalTabungan(tabungan: ParsedRow<"Tabungan">[], userId: string): number {
   let total = 0;
   for (const { data: t } of tabungan) {
     if (t.user_id !== userId) continue;
-    if (t.jenis === "setor") total += t.nominal ?? 0;
+    if (t.jenis === "setor" || t.jenis === "simpan") total += t.nominal ?? 0;
     else if (t.jenis === "tarik") total -= t.nominal ?? 0;
   }
   return total;

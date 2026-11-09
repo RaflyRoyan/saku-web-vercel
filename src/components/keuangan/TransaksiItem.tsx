@@ -69,11 +69,11 @@ function useTekanLama(onLama: (() => void) | undefined) {
   };
 }
 
-/** Satu baris transaksi (02 §5.3). Tap → form edit; tarik tabungan → halaman Tabungan. Dengan `pilih`: tekan lama untuk memilih. */
+/** Satu baris transaksi (02 §5.3). Tap → form edit; tarik/setor tabungan → halaman Tabungan. Dengan `pilih`: tekan lama untuk memilih. */
 export function TransaksiItem({ t, pilih }: { t: Transaksi; pilih?: PilihTransaksi }) {
   const tekanLama = useTekanLama(pilih && !pilih.ids ? () => pilih.mulai(t.id) : undefined);
   const { icon: Icon, cls } = IKON[t.tipe];
-  const tarik = t.kodeSistem === "TARIK_TABUNGAN";
+  const tarik = t.kodeSistem === "TARIK_TABUNGAN" || t.kodeSistem === "SETOR_TABUNGAN";
   const rute = `${t.akunNama} → ${t.akunTujuanNama}`;
   const judul = t.deskripsi || (t.tipe === "transfer" ? rute : (t.kategoriNama ?? "Tanpa kategori"));
   const detail =

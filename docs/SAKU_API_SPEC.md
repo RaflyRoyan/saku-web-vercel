@@ -24,7 +24,7 @@ Konsep inti:
 | **Saldo awal** | Modal setiap akun di awal periode. **Gaji masuk lewat sini**, bukan transaksi. Akun yang tidak diisi = 0. |
 | **Transaksi** | `keluar` (pengeluaran), `masuk` (pemasukan tambahan selain gaji), `transfer` (pindah antar akun sendiri, opsional `biaya_admin`) |
 | **Sisa** | Saldo akhir setiap akun saat periode ditutup. Otomatis dicatat ke Tabungan sebagai `setor`. Boleh minus. |
-| **Tabungan** | Σ setor − Σ tarik. **Tarik** otomatis membuat transaksi `masuk` kategori `TARIK_TABUNGAN` di periode aktif. |
+| **Tabungan** | Σ setor + Σ simpan − Σ tarik. **Tarik** otomatis membuat transaksi `masuk` kategori `TARIK_TABUNGAN` di periode aktif. **Setor langsung** (§7.6a) membuat transaksi `keluar` kategori `SETOR_TABUNGAN`. |
 | **Berulang** | Langganan dengan pengingat H-n dan konfirmasi manual (bisa juga dilewati) |
 
 ---
@@ -182,7 +182,7 @@ Aplikasi **gagal start** dengan pesan jelas kalau env wajib kosong.
 | B | user_id | teks | |
 | C | nama | teks | 1–40 karakter, unik per user + tipe (di antara kategori aktif) |
 | D | tipe | teks | `masuk` / `keluar` |
-| E | kode_sistem | teks | kosong, `BIAYA_ADMIN` (keluar), `TARIK_TABUNGAN` (masuk), atau `PATUNGAN` (masuk, pelunasan split bill §7.9; dibuat otomatis saat pertama dipakai kalau belum ada). **Kategori sistem tidak bisa dinonaktifkan, diganti tipenya, atau dibuat manual.** |
+| E | kode_sistem | teks | kosong, `BIAYA_ADMIN` (keluar), `TARIK_TABUNGAN` (masuk), `SETOR_TABUNGAN` (keluar, setor langsung §7.6a; dibuat otomatis saat pertama dipakai), atau `PATUNGAN` (masuk, pelunasan split bill §7.9; dibuat otomatis saat pertama dipakai kalau belum ada). **Kategori sistem tidak bisa dinonaktifkan, diganti tipenya, atau dibuat manual.** |
 | F | aktif | boolean | |
 | G–J | audit | | |
 | J | kelompok_id | teks | ID `KelompokKategori`. Hanya tipe `keluar`; kosong = kelompok **Lainnya**. Ditaruh setelah audit supaya kolom lama tidak bergeser |
@@ -302,12 +302,12 @@ Tepat satu dari `kelompok_id` / `kategori_id` terisi; unik per (periode_id, kelo
 | A | id | teks | `TB-…` |
 | B | user_id | teks | |
 | C | tanggal | tanggal | setor = tanggal_selesai periode asal; tarik = input |
-| D | jenis | teks | `setor` / `tarik` |
+| D | jenis | teks | `setor` (sisa saat tutup periode) / `simpan` (setor langsung §7.6a) / `tarik` |
 | E | periode_id | teks | setor: periode asal sisa. Tarik: periode aktif saat ditarik |
 | F | akun_id | teks | |
 | G | nominal | angka | setor = sisa akun − `diteruskan` (boleh minus/0); tarik > 0 |
 | H | keterangan | teks | setor: `"Sisa {nama periode}"` |
-| I | transaksi_id | teks | tarik: ID transaksi `masuk` TARIK_TABUNGAN yang dibuat otomatis |
+| I | transaksi_id | teks | tarik: ID transaksi `masuk` TARIK_TABUNGAN; simpan: ID transaksi `keluar` SETOR_TABUNGAN (dibuat otomatis) |
 | J–M | audit | | |
 | N | diteruskan | angka | setor: bagian sisa akun yang diteruskan ke periode baru (bukan ditabung). Kosong = 0. Ditaruh setelah audit supaya kolom lama tidak bergeser |
 
@@ -512,6 +512,19 @@ Aturan terkait:
 - Transaksi dengan kategori `TARIK_TABUNGAN` **tidak boleh diedit atau dihapus lewat endpoint transaksi** → 409 `"Ubah lewat menu Tabungan."`
 - Kategori `TARIK_TABUNGAN` tidak muncul di pilihan kategori saat membuat transaksi `masuk` biasa (endpoint kategori mendukung filter `untukInput=true`).
 
+### 7.6a Setor langsung ke tabungan
+
+`POST /api/tabungan/setor` `{tanggal?, akunId, nominal, keterangan?}`: memindahkan saldo akun ke tabungan tanpa menunggu tutup periode.
+
+1. Harus ada periode aktif (422), tanggal (default hari ini) di periode aktif, akun aktif & dipilih pengguna.
+2. `nominal` ≤ saldo akun di periode aktif (§7.3). Kalau lebih → 422 `"Saldo {akun} hanya Rp X."`
+3. Buat baris **Tabungan** `jenis=simpan`, `periode_id` = periode aktif, lalu **Transaksi** `tipe=keluar`, kategori `SETOR_TABUNGAN`, deskripsi = keterangan (default "Setor tabungan").
+4. Respons 201 `{ id, saldoTabunganAkun, transaksi }`.
+
+Saldo akun langsung berkurang, jadi sisa saat tutup periode (`setor`) ikut lebih kecil: uang tidak terhitung dua kali. **Bukan pengeluaran**: tidak masuk `totalPengeluaran`, pengeluaran per kategori, anggaran, maupun ringkasan label. Ringkasan per akun menampilkannya di field `ditabung` (`saldoAkhir = … − keluar − ditabung − …`).
+
+Aturan sama dengan tarik: hapus lewat `DELETE /api/tabungan/{id}` selama masih di periode aktif (transaksinya ikut terhapus); transaksi `SETOR_TABUNGAN` tidak bisa diedit/dihapus lewat endpoint transaksi (409), dan kategorinya tidak bisa dipakai manual (400 `"Kategori ini hanya untuk setor tabungan."`). Label tetap boleh.
+
 ### 7.7 Langganan (Berulang)
 
 Untuk tanggal acuan `hari` (default hari ini, WIB):
@@ -699,7 +712,8 @@ Respons kategori memuat `kelompokId` + `kelompokNama` (pemasukan: `null`).
 |---|---|---|---|
 | GET | `/api/tabungan` | | `{ total, perAkun: [{ akunId, nama, setor, tarik, saldo }], riwayat: [...] }` |
 | POST | `/api/tabungan/tarik` | `{ tanggal?, akunId, nominal, keterangan }` | §7.6 |
-| DELETE | `/api/tabungan/{id}` | | Hanya `tarik` di periode aktif |
+| POST | `/api/tabungan/setor` | `{ tanggal?, akunId, nominal, keterangan? }` | Setor langsung §7.6a |
+| DELETE | `/api/tabungan/{id}` | | Hanya `tarik` / `simpan` di periode aktif |
 
 ### 10.8a Split bill & pengaturan
 

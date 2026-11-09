@@ -14,7 +14,7 @@ import { assertBukanTagihanQris } from "../services/tagihan-qris.js";
 import { periodeAktif } from "../services/saldo.js";
 import { rencanaSetorTerdampak, simpanSetor } from "../services/tabungan.js";
 import {
-  assertBukanTarik,
+  assertBukanTabungan,
   peringatanSaldo,
   resolveTransaksi,
   transaksiBody,
@@ -171,7 +171,7 @@ transaksi.put("/:id", jsonBody(transaksiBody), async (c) => {
   const uid = user.data.id;
   const s = parseAll(data);
   const target = findOwned(s.transaksi, c.req.param("id"), uid);
-  assertBukanTarik(target.data, s.kategori);
+  assertBukanTabungan(target.data, s.kategori);
   assertBukanSplit(target.data, rowsOf(data, "SplitBill"), rowsOf(data, "SplitPeserta"));
   assertBukanTagihanQris(target.data, rowsOf(data, "TagihanQris"));
   const kolom = resolveTransaksi(body, s, uid, c.var.clock, target.data);
@@ -197,7 +197,7 @@ transaksi.delete("/:id", async (c) => {
   const uid = user.data.id;
   const s = parseAll(data);
   const target = findOwned(s.transaksi, c.req.param("id"), uid);
-  assertBukanTarik(target.data, s.kategori);
+  assertBukanTabungan(target.data, s.kategori);
   assertBukanSplit(target.data, rowsOf(data, "SplitBill"), rowsOf(data, "SplitPeserta"));
   assertBukanTagihanQris(target.data, rowsOf(data, "TagihanQris"));
 

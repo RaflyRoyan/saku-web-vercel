@@ -23,6 +23,7 @@ export function RincianAkun({ a }: { a: RingkasanAkun }) {
     ["Keluar", bertanda(-a.keluar), a.keluar ? "text-keluar" : undefined],
     ["Biaya admin", bertanda(-a.biayaAdmin), a.biayaAdmin ? "text-keluar" : undefined],
   ];
+  if (a.ditabung) baris.push(["Ditabung", bertanda(-a.ditabung), "text-tabungan"]);
   return (
     <div className="flex flex-col gap-1.5 text-sm">
       <dl className="flex flex-col gap-1">

@@ -78,6 +78,8 @@ export function buildPengguna(
 const KATEGORI_SISTEM = [
   { kode: "BIAYA_ADMIN", nama: "Biaya Admin Bank", tipe: "keluar" },
   { kode: "TARIK_TABUNGAN", nama: "Tarik Tabungan", tipe: "masuk" },
+  // Setor langsung ke tabungan di tengah periode; bukan pengeluaran (tidak masuk ringkasan/anggaran)
+  { kode: "SETOR_TABUNGAN", nama: "Setor Tabungan", tipe: "keluar" },
   // Pelunasan split bill dari peserta lain
   { kode: "PATUNGAN", nama: "Patungan", tipe: "masuk" },
 ] as const;

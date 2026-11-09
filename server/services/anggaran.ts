@@ -58,12 +58,15 @@ export const anggaranMilik = (rows: Anggaran[], userId: string, periodeId: strin
 /** Pengeluaran per sub kategori di satu periode: keluar + biaya admin transfer (kategori BIAYA_ADMIN), sama dengan ringkasan. */
 export function terpakaiPerKategori(periodeId: string, userId: string, transaksi: ParsedRow<"Transaksi">[], kategori: Kategori[]): Map<string, number> {
   const biayaAdminId = kategori.find((k) => k.data.kode_sistem === "BIAYA_ADMIN")?.data.id ?? "BIAYA_ADMIN";
+  // Setor langsung ke tabungan bukan pengeluaran
+  const setorId = kategori.find((k) => k.data.kode_sistem === "SETOR_TABUNGAN")?.data.id;
   const map = new Map<string, number>();
   const add = (id: string, n: number) => map.set(id, (map.get(id) ?? 0) + n);
   for (const { data: t } of transaksi) {
     if (t.user_id !== userId || t.periode_id !== periodeId) continue;
-    if (t.tipe === "keluar") add(t.kategori_id, t.nominal ?? 0);
-    else if (t.tipe === "transfer" && (t.biaya_admin ?? 0) > 0) add(biayaAdminId, t.biaya_admin ?? 0);
+    if (t.tipe === "keluar") {
+      if (t.kategori_id !== setorId) add(t.kategori_id, t.nominal ?? 0);
+    } else if (t.tipe === "transfer" && (t.biaya_admin ?? 0) > 0) add(biayaAdminId, t.biaya_admin ?? 0);
   }
   return map;
 }

@@ -190,3 +190,67 @@ describe("tutup periode: sisa diteruskan atau ditabung", () => {
     expect((await budi.get("/periode/aktif")).body.nama).toBe("Gajian Okt");
   });
 });
+
+describe("setor langsung ke tabungan (tanpa tutup periode)", () => {
+  type Ringkasan = { totalPengeluaran: number; pengeluaranPerKategori: unknown[]; perAkun: { akunId: string; keluar: number; ditabung: number; saldoAkhir: number }[] };
+
+  it("saldo akun berkurang, tidak dihitung pengeluaran, sisa saat tutup hanya sisanya (tanpa dobel)", async () => {
+    const { budi, akun, clock, p1 } = await bagiGaji();
+    const res = await budi.post("/tabungan/setor", { akunId: akun.BCA, nominal: 1_000_000, keterangan: "Dana darurat" });
+    expect(res.status).toBe(201);
+    expect(res.body.saldoTabunganAkun).toBe(1_000_000);
+    expect(res.body.transaksi).toMatchObject({ tipe: "keluar", akunId: akun.BCA, kodeSistem: "SETOR_TABUNGAN", nominal: 1_000_000, deskripsi: "Dana darurat", tanggal: "2026-10-30" });
+
+    const tab = (await budi.get("/tabungan")).body;
+    expect(tab.total).toBe(1_000_000);
+    expect(tab.perAkun).toEqual([{ akunId: akun.BCA, nama: "BCA", setor: 1_000_000, tarik: 0, saldo: 1_000_000 }]);
+    expect(tab.riwayat[0]).toMatchObject({ jenis: "simpan", keterangan: "Dana darurat", bisaHapus: true, transaksiId: res.body.transaksi.id });
+
+    const r = (await budi.get(`/periode/${p1.id}/ringkasan`)).body as Ringkasan;
+    expect(r.totalPengeluaran).toBe(28_500);
+    expect(r.pengeluaranPerKategori).toHaveLength(2);
+    expect(r.perAkun.find((a) => a.akunId === akun.BCA)).toMatchObject({ keluar: 0, ditabung: 1_000_000, saldoAkhir: 1_997_500 });
+    expect((await budi.get("/periode/aktif/pratinjau-tutup")).body.total).toBe(4_971_500);
+
+    clock.set("2026-11-25T03:00:00Z");
+    const tutup = await budi.post("/periode/mulai", {});
+    expect(tutup.body.totalTabungan).toBe(5_971_500);
+    expect((await budi.get("/tabungan")).body.total).toBe(5_971_500);
+  });
+
+  it("validasi: melebihi saldo akun 422, tanpa periode 422, kategori sistem tidak bisa dipakai manual, transaksinya terkunci", async () => {
+    const t = await siapkan();
+    expect((await t.budi.post("/tabungan/setor", { akunId: t.akun.BCA, nominal: 1 })).status).toBe(422);
+    const { budi, akun, makan } = await bagiGaji();
+    const lebih = await budi.post("/tabungan/setor", { akunId: akun.GoPay, nominal: 275_001 });
+    expect(lebih.status).toBe(422);
+    expect(lebih.body.title).toBe("Saldo GoPay hanya Rp 275.000.");
+    expect((await budi.post("/tabungan/setor", { akunId: akun.GoPay, nominal: 0 })).status).toBe(400);
+
+    const ok = (await budi.post("/tabungan/setor", { akunId: akun.GoPay, nominal: 275_000 })).body;
+    expect(ok.transaksi.deskripsi).toBe("Setor tabungan");
+    const tid = ok.transaksi.id;
+    expect((await budi.put(`/transaksi/${tid}`, { tipe: "keluar", akunId: akun.GoPay, kategoriId: makan, nominal: 1 })).status).toBe(409);
+    expect((await budi.del(`/transaksi/${tid}`)).status).toBe(409);
+    const manual = await budi.post("/transaksi", { tipe: "keluar", akunId: akun.BCA, kategoriId: ok.transaksi.kategoriId, nominal: 1 });
+    expect(manual.status).toBe(400);
+    expect(manual.body.errors.kategoriId).toEqual(["Kategori ini hanya untuk setor tabungan."]);
+    // Label tetap boleh
+    expect((await budi.put("/transaksi/label", { ids: [tid], label: "Darurat" })).status).toBe(200);
+  });
+
+  it("hapus setoran di periode aktif → transaksi ikut hilang; setelah periode ditutup tidak bisa dihapus", async () => {
+    const { budi, akun, clock } = await bagiGaji();
+    const a = (await budi.post("/tabungan/setor", { akunId: akun.Jago, nominal: 100_000 })).body;
+    expect((await budi.del(`/tabungan/${a.id}`)).status).toBe(204);
+    expect((await budi.get(`/transaksi/${a.transaksi.id}`)).status).toBe(404);
+    expect((await budi.get("/tabungan")).body.total).toBe(0);
+
+    const b = (await budi.post("/tabungan/setor", { akunId: akun.Jago, nominal: 100_000 })).body;
+    clock.set("2026-11-25T03:00:00Z");
+    await budi.post("/periode/mulai", {});
+    expect((await budi.del(`/tabungan/${b.id}`)).status).toBe(409);
+    const tab = (await budi.get("/tabungan")).body;
+    expect(tab.perAkun.find((x: { akunId: string }) => x.akunId === akun.Jago).saldo).toBe(699_000);
+  });
+});

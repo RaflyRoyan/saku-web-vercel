@@ -396,7 +396,24 @@ export const KATALOG: Endpoint[] = [
     contoh: { akunId: "AK-...", nominal: 100000, keterangan: "Darurat" },
     respons: "201 `{ id, saldoTabunganAkun, transaksi }`",
   },
-  { id: "tabungan-delete", grup: "Tabungan", method: "DELETE", path: "/tabungan/{id}", judul: "Batalkan tarik", ket: "Hanya tarik di periode aktif; transaksinya ikut dihapus.", akses: "login", respons: "204" },
+  {
+    id: "tabungan-setor",
+    grup: "Tabungan",
+    method: "POST",
+    path: "/tabungan/setor",
+    judul: "Setor langsung",
+    ket: "Memindahkan saldo akun ke tabungan tanpa menunggu tutup periode: baris simpan + transaksi keluar (kategori Setor Tabungan, bukan pengeluaran) di periode aktif.",
+    akses: "login",
+    field: [
+      { nama: "akunId", ket: "", wajib: true },
+      { nama: "nominal", ket: "≤ saldo akun di periode aktif", wajib: true },
+      { nama: "tanggal", ket: "yyyy-MM-dd" },
+      { nama: "keterangan", ket: "default \"Setor tabungan\"" },
+    ],
+    contoh: { akunId: "AK-...", nominal: 500000, keterangan: "Dana darurat" },
+    respons: "201 `{ id, saldoTabunganAkun, transaksi }`",
+  },
+  { id: "tabungan-delete", grup: "Tabungan", method: "DELETE", path: "/tabungan/{id}", judul: "Batalkan tarik / setor", ket: "Hanya tarik atau setor langsung di periode aktif; transaksinya ikut dihapus.", akses: "login", respons: "204" },
 
   // ── Langganan
   { id: "berulang-list", grup: "Langganan", method: "GET", path: "/berulang", judul: "Daftar langganan", ket: "", akses: "login", query: [{ nama: "termasukNonaktif", ket: "true / false", contoh: "false" }], respons: "Langganan + status bulan ini." },

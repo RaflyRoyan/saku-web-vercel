@@ -18,6 +18,8 @@ export interface RingkasanAkun {
   saldoAwal: number;
   masuk: number;
   keluar: number;
+  /** Setor langsung ke tabungan dari akun ini (bukan pengeluaran, tetap mengurangi saldo). */
+  ditabung: number;
   biayaAdmin: number;
   transferMasuk: number;
   transferKeluar: number;
@@ -74,6 +76,7 @@ export function hitungRingkasan(
   const namaKategori = new Map(kategori.map((k) => [k.data.id, k.data.nama]));
   const biayaAdminKat = kategori.find((k) => k.data.kode_sistem === "BIAYA_ADMIN")?.data;
   const biayaAdminId = biayaAdminKat?.id ?? "BIAYA_ADMIN";
+  const setorId = kategori.find((k) => k.data.kode_sistem === "SETOR_TABUNGAN")?.data.id;
   const nama = (id: string) => namaKategori.get(id) ?? (id === biayaAdminId ? "Biaya Admin Bank" : "Tanpa kategori");
 
   const perAkun = new Map<string, RingkasanAkun & { kat: KategoriCounter }>();
@@ -88,6 +91,7 @@ export function hitungRingkasan(
         saldoAwal: 0,
         masuk: 0,
         keluar: 0,
+        ditabung: 0,
         biayaAdmin: 0,
         transferMasuk: 0,
         transferKeluar: 0,
@@ -120,6 +124,8 @@ export function hitungRingkasan(
     if (t.tipe === "masuk") {
       asal.masuk += nominal;
       pemasukan.add(t.kategori_id, nominal);
+    } else if (t.tipe === "keluar" && t.kategori_id === setorId) {
+      asal.ditabung += nominal;
     } else if (t.tipe === "keluar") {
       asal.keluar += nominal;
       asal.kat.add(t.kategori_id, nominal);
@@ -147,7 +153,7 @@ export function hitungRingkasan(
     r.nama = a.nama;
     r.jenis = a.jenis;
     r.aktif = a.aktif;
-    r.saldoAkhir = r.saldoAwal + r.masuk - r.keluar - r.biayaAdmin + r.transferMasuk - r.transferKeluar;
+    r.saldoAkhir = r.saldoAwal + r.masuk - r.keluar - r.ditabung - r.biayaAdmin + r.transferMasuk - r.transferKeluar;
     r.pengeluaranPerKategori = kat.list();
     r.pengeluaranPerKelompok = perKelompok(r.pengeluaranPerKategori, kategori, kelompok);
     daftar.push(r);

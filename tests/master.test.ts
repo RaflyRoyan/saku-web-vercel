@@ -119,7 +119,7 @@ describe("kategori (master bersama)", () => {
     await admin.post("/kategori", { nama: "Gaji", tipe: "masuk" });
 
     const semua = (await budi.get("/kategori")).body as { nama: string; kodeSistem: string | null }[];
-    expect(semua.map((k) => k.nama).sort()).toEqual(["Biaya Admin Bank", "Gaji", "Makan", "Patungan", "Tarik Tabungan"]);
+    expect(semua.map((k) => k.nama).sort()).toEqual(["Biaya Admin Bank", "Gaji", "Makan", "Patungan", "Setor Tabungan", "Tarik Tabungan"]);
     const keluarInput = (await budi.get("/kategori?tipe=keluar&untukInput=true")).body as { nama: string }[];
     expect(keluarInput.map((k) => k.nama)).toEqual(["Makan"]);
   });
@@ -146,6 +146,6 @@ describe("kategori (master bersama)", () => {
     expect((await admin.put(`/kategori/${k.id}`, { nama: "Makan & Minum" })).body.nama).toBe("Makan & Minum");
     expect((await admin.put(`/kategori/${k.id}/aktif`, { aktif: false })).status).toBe(204);
     const list = (await admin.get("/kategori?tipe=keluar")).body as { nama: string }[];
-    expect(list.map((x) => x.nama)).toEqual(["Biaya Admin Bank"]);
+    expect(list.map((x) => x.nama)).toEqual(["Biaya Admin Bank", "Setor Tabungan"]);
   });
 });

@@ -5,7 +5,8 @@ import type { Periode } from "./usePeriode";
 export interface RiwayatTabungan {
   id: string;
   tanggal: string;
-  jenis: "setor" | "tarik";
+  /** setor = sisa saat tutup periode, simpan = setor langsung. */
+  jenis: "setor" | "simpan" | "tarik";
   periodeId: string;
   periodeNama: string;
   akunId: string;
