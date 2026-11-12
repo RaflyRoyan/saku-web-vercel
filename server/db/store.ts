@@ -90,29 +90,49 @@ export function keDb<S extends NamaTabel>(tabel: S, baris: Baris<S>): Record<str
 
 const MAKS_INSERT = 500;
 
+/**
+ * Supabase transaction pooler (Supavisor, port 6543) macet kalau beberapa query dikirim bertumpuk
+ * (pipelining postgres.js) di satu koneksi. Karena itu tiap operasi store dijalankan bergiliran:
+ * operasi berikutnya baru mulai setelah yang sebelumnya selesai, termasuk dari request lain di instance yang sama.
+ */
+class Antrean {
+  private ekor: Promise<unknown> = Promise.resolve();
+
+  jalankan<T>(fn: () => Promise<T>): Promise<T> {
+    const hasil = this.ekor.then(fn, fn);
+    this.ekor = hasil.catch(() => {});
+    return hasil;
+  }
+}
+
 export class PostgresStore implements Store {
   private sql: Sql;
+  private antrean = new Antrean();
 
   constructor(sql: Sql) {
     this.sql = sql;
   }
 
+  /** Semua tabel dibaca dalam satu statement (satu round-trip), tiap tabel jadi array JSON. */
   async read<S extends NamaTabel>(tabel: readonly S[], opsi: BacaOpsi = {}): Promise<DataTabel<S>> {
     const sql = this.sql;
     const unik = [...new Set(tabel)];
-    const hasil = await jalankan(() =>
-      Promise.all(
-        unik.map((t) => {
-          const filter = opsi.userId && punyaUserId(t) ? sql`where user_id = ${opsi.userId}` : sql``;
-          return sql`select * from ${sql(tabelDb(t))} ${filter} order by no`;
-        }),
-      ),
-    );
     const data = {} as DataTabel<S>;
-    unik.forEach((t, i) => {
-      (data as Record<string, unknown>)[t] = hasil[i].map((r) => ({ data: dariDb(t, r) }));
+    if (!unik.length) return data;
+    const kolom = unik.map((t) => {
+      const filter = opsi.userId && punyaUserId(t) ? sql`where user_id = ${opsi.userId}` : sql``;
+      return sql`(select coalesce(json_agg(x order by x.no), '[]'::json) from ${sql(tabelDb(t))} x ${filter}) as ${sql(t)}`;
     });
+    const [row] = await this.jalankan(() => sql`select ${kolom.reduce((a, b) => sql`${a}, ${b}`)}`);
+    for (const t of unik) {
+      const isi = row[t] as Record<string, unknown>[];
+      (data as Record<string, unknown>)[t] = isi.map((r) => ({ data: dariDb(t, r) }));
+    }
     return data;
+  }
+
+  private jalankan<T>(fn: () => Promise<T>): Promise<T> {
+    return this.antrean.jalankan(() => jalankan(fn));
   }
 
   append<S extends NamaTabel>(tabel: S, baris: readonly Baris<S>[]): Promise<void> {
@@ -137,7 +157,7 @@ export class PostgresStore implements Store {
   }
 
   async kolomTabel(): Promise<Record<string, string[]>> {
-    const rows = await jalankan(
+    const rows = await this.jalankan(
       () => this.sql`select table_name, column_name from information_schema.columns where table_schema = 'public' order by ordinal_position`,
     );
     const hasil: Record<string, string[]> = {};
@@ -147,7 +167,7 @@ export class PostgresStore implements Store {
 
   async batch(ops: readonly Operasi[]): Promise<void> {
     if (!ops.length) return;
-    await jalankan(() =>
+    await this.jalankan(() =>
       this.sql.begin(async (tx) => {
         for (const op of ops) await tulis(tx, op);
       }),
