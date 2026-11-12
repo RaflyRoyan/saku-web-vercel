@@ -4,11 +4,11 @@ import type { AppEnv } from "../app.js";
 import { loadSession, requireAdmin, requireAuth } from "../auth/session.js";
 import { AppError, validationError } from "../common/errors.js";
 import { jsonBody } from "../common/validation.js";
-import { newId, newRow, notFound, rowsOf, updatedRow, type ParsedRow } from "../repositories/rows.js";
+import { newId, newRow, notFound, rowsOf, updatedRow, type Row } from "../repositories/rows.js";
 import { kelompokIdDari, LAINNYA } from "../services/kelompok.js";
 
 // Kategori = master bersama semua pengguna; hanya admin yang menulis (02 §2).
-// Di UI, kategori pengeluaran tampil sebagai "Sub kategori" di bawah kelompoknya (sheet KelompokKategori).
+// Di UI, kategori pengeluaran tampil sebagai "Sub kategori" di bawah kelompoknya (tabel KelompokKategori).
 
 const namaSchema = z
   .string({ error: "Nama kategori wajib diisi." })
@@ -30,11 +30,11 @@ export interface KategoriDto {
   kelompokNama: string | null;
 }
 
-type Kelompok = ParsedRow<"KelompokKategori">[];
+type Kelompok = Row<"KelompokKategori">[];
 
 const toDto =
   (kelompok: Kelompok) =>
-  (k: ParsedRow<"Kategori">["data"]): KategoriDto => {
+  (k: Row<"Kategori">["data"]): KategoriDto => {
     const kelompokId = kelompokIdDari(k, kelompok);
     return {
       id: k.id,
@@ -48,7 +48,7 @@ const toDto =
   };
 
 /** Nama unik per tipe (case-insensitive) di antara kategori aktif. */
-function assertNamaFree(rows: ParsedRow<"Kategori">[], nama: string, tipe: string, exceptId?: string) {
+function assertNamaFree(rows: Row<"Kategori">[], nama: string, tipe: string, exceptId?: string) {
   const n = nama.toLowerCase();
   if (rows.some((r) => r.data.aktif && r.data.id !== exceptId && r.data.tipe === tipe && r.data.nama.toLowerCase() === n)) {
     throw new AppError(409, "Nama kategori sudah dipakai.", { nama: ["Nama kategori sudah dipakai."] });
@@ -72,7 +72,7 @@ function resolveKelompok(tipe: string, kelompokId: string | undefined, kelompok:
   return id;
 }
 
-function findKategori(rows: ParsedRow<"Kategori">[], id: string) {
+function findKategori(rows: Row<"Kategori">[], id: string) {
   const found = rows.find((r) => r.data.id === id);
   if (!found) throw notFound();
   return found;
@@ -88,7 +88,7 @@ kategori.get("/", async (c) => {
   const termasukNonaktif = c.req.query("termasukNonaktif") === "true";
   const { data } = await loadSession(c, ["Kategori", "KelompokKategori"]);
 
-  // Urutan mengikuti urutan baris di sheet
+  // Urutan mengikuti urutan insert (kolom `no`), sama seperti urutan baris di spreadsheet dulu
   const list = rowsOf(data, "Kategori")
     .filter(({ data: k }) => (!tipe || k.tipe === tipe) && (termasukNonaktif || k.aktif) && !(untukInput && k.kode_sistem))
     .map((r) => toDto(rowsOf(data, "KelompokKategori"))(r.data));
@@ -122,7 +122,7 @@ kategori.put("/:id", jsonBody(z.object({ nama: namaSchema, kelompokId: kelompokS
     body.kelompokId === undefined ? target.data.kelompok_id : resolveKelompok(target.data.tipe, body.kelompokId, kelompok, target.data.kelompok_id);
 
   const changes = { nama: body.nama, kelompok_id: kelompokId };
-  await c.var.store().updateRow("Kategori", target.row, updatedRow("Kategori", target.data, changes, user.data.id, c.var.clock));
+  await c.var.store().updateRow("Kategori", updatedRow("Kategori", target.data, changes, user.data.id, c.var.clock));
   return c.json(toDto(kelompok)({ ...target.data, ...changes }));
 });
 
@@ -137,7 +137,7 @@ kategori.put("/:id/aktif", jsonBody(z.object({ aktif: z.boolean({ error: "Aktif 
   if (aktif) assertNamaFree(rows, target.data.nama, target.data.tipe, target.data.id);
 
   if (target.data.aktif !== aktif) {
-    await c.var.store().updateRow("Kategori", target.row, updatedRow("Kategori", target.data, { aktif }, user.data.id, c.var.clock));
+    await c.var.store().updateRow("Kategori", updatedRow("Kategori", target.data, { aktif }, user.data.id, c.var.clock));
   }
   return c.body(null, 204);
 });

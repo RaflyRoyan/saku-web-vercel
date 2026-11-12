@@ -2,9 +2,9 @@ import { z } from "zod";
 import { passwordProblem } from "../auth/password.js";
 import type { Clock } from "../common/clock.js";
 import { AppError } from "../common/errors.js";
-import { newId, newRow, rowsOf, updatedRow, type ParsedRow } from "../repositories/rows.js";
-import type { Baris } from "../sheets/schema.js";
-import type { RowUpdate, SheetData, SheetStore } from "../sheets/store.js";
+import { newId, newRow, updatedRow, type Row } from "../repositories/rows.js";
+import type { Baris } from "../db/schema.js";
+import type { Operasi, Store } from "../db/store.js";
 
 // ---------- Schema body ----------
 
@@ -45,12 +45,12 @@ export function toDto(p: Pick<Baris<"Pengguna">, "id" | "username" | "nama" | "p
 
 // ---------- Operasi ----------
 
-export function findByUsername(rows: ParsedRow<"Pengguna">[], username: string) {
+export function findByUsername(rows: Row<"Pengguna">[], username: string) {
   const u = username.trim().toLowerCase();
   return rows.find((r) => r.data.username.toLowerCase() === u);
 }
 
-export function assertUsernameFree(rows: ParsedRow<"Pengguna">[], username: string) {
+export function assertUsernameFree(rows: Row<"Pengguna">[], username: string) {
   if (findByUsername(rows, username)) {
     throw new AppError(409, "Username sudah dipakai.", { username: ["Username sudah dipakai."] });
   }
@@ -58,7 +58,7 @@ export function assertUsernameFree(rows: ParsedRow<"Pengguna">[], username: stri
 
 /** Data pengguna baru (belum ditulis). `by` kosong = pengguna membuat dirinya sendiri (setup awal). */
 export function buildPengguna(
-  existing: ParsedRow<"Pengguna">[],
+  existing: Row<"Pengguna">[],
   input: { username: string; nama: string; peran: "admin" | "user"; passwordHash: string },
 ): Omit<Baris<"Pengguna">, "created_by" | "created_at" | "updated_by" | "updated_at"> {
   return {
@@ -89,14 +89,13 @@ const KATEGORI_SISTEM = [
  * Kategori aktif dengan nama + tipe sama tapi tanpa kode diberi kode, supaya nama tidak dobel.
  */
 export async function ensureKategoriSistem(
-  store: SheetStore,
-  kategoriData: SheetData,
+  store: Store,
+  rows: Row<"Kategori">[],
   by: string,
   clock: Clock,
 ): Promise<void> {
-  const rows = rowsOf({ Kategori: kategoriData }, "Kategori");
-  const append: ReturnType<typeof newRow<"Kategori">>[] = [];
-  const updates: RowUpdate[] = [];
+  const append: Baris<"Kategori">[] = [];
+  const updates: Operasi[] = [];
   const used = [...rows];
 
   for (const sys of KATEGORI_SISTEM) {
@@ -105,20 +104,19 @@ export async function ensureKategoriSistem(
       (r) => r.data.aktif && r.data.kode_sistem === "" && r.data.tipe === sys.tipe && r.data.nama.toLowerCase() === sys.nama.toLowerCase(),
     );
     if (sameName) {
-      updates.push({ sheet: "Kategori", row: sameName.row, values: updatedRow("Kategori", sameName.data, { kode_sistem: sys.kode }, by, clock) });
+      updates.push({ jenis: "update", tabel: "Kategori", baris: updatedRow("Kategori", sameName.data, { kode_sistem: sys.kode }, by, clock) });
       continue;
     }
     const id = newId("Kategori", used);
-    used.push({ row: 0, data: { id } as Baris<"Kategori"> });
+    used.push({ data: { id } as Baris<"Kategori"> });
     append.push(newRow("Kategori", { id, nama: sys.nama, tipe: sys.tipe, kode_sistem: sys.kode, aktif: true, kelompok_id: "" }, by, clock));
   }
 
-  if (updates.length) await store.updateRows(updates);
-  if (append.length) await store.append("Kategori", append);
+  await store.batch([...updates, ...(append.length ? [{ jenis: "insert", tabel: "Kategori", baris: append } as Operasi] : [])]);
 }
 
 /** Jumlah admin aktif kalau `override` diterapkan pada satu pengguna. */
-export function countActiveAdmins(rows: ParsedRow<"Pengguna">[], override?: { id: string; peran: string; aktif: boolean }) {
+export function countActiveAdmins(rows: Row<"Pengguna">[], override?: { id: string; peran: string; aktif: boolean }) {
   return rows.filter((r) => {
     const d = override && r.data.id === override.id ? override : r.data;
     return d.peran === "admin" && d.aktif;

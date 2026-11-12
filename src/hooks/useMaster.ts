@@ -35,7 +35,7 @@ export interface Kategori {
   kelompokNama: string | null;
 }
 
-/** Kategori induk pengeluaran (sheet KelompokKategori). Di UI disebut "Kategori"; Kategori lama = "Sub kategori". */
+/** Kategori induk pengeluaran (tabel KelompokKategori). Di UI disebut "Kategori"; Kategori lama = "Sub kategori". */
 export interface KelompokKategori {
   id: string;
   nama: string;

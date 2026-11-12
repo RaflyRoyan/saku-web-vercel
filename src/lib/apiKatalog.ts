@@ -35,16 +35,16 @@ const URUTAN = [{ nama: "ids", ket: "Daftar ID sesuai urutan baru", wajib: true 
 
 export const KATALOG: Endpoint[] = [
   // ── Health
-  { id: "health", grup: "Health", method: "GET", path: "/health", judul: "Cek API hidup", ket: "Tanpa login, tanpa akses Google Sheets.", akses: "publik", respons: "`{ status: \"ok\", waktu }`" },
+  { id: "health", grup: "Health", method: "GET", path: "/health", judul: "Cek API hidup", ket: "Tanpa login, tanpa akses database.", akses: "publik", respons: "`{ status: \"ok\", waktu }`" },
   {
-    id: "health-sheets",
+    id: "health-db",
     grup: "Health",
     method: "GET",
-    path: "/health/sheets",
-    judul: "Cek header spreadsheet",
-    ket: "Membandingkan baris 1 setiap sheet dengan schema. Kolom kurang, salah urut, atau tidak dikenal dilaporkan per sheet.",
+    path: "/health/db",
+    judul: "Cek struktur database",
+    ket: "Membandingkan tabel & kolom di database dengan schema. Tabel hilang atau kolom kurang dilaporkan per tabel (503 → jalankan migrasi terbaru).",
     akses: "publik",
-    respons: "Status tiap sheet beserta daftar `masalah`.",
+    respons: "Status tiap tabel beserta daftar `masalah`.",
   },
 
   // ── Auth
@@ -55,7 +55,7 @@ export const KATALOG: Endpoint[] = [
     method: "POST",
     path: "/auth/setup",
     judul: "Setup admin pertama",
-    ket: "Hanya bisa sekali, saat sheet Pengguna masih kosong. Juga membuat kategori sistem & kelompok bawaan.",
+    ket: "Hanya bisa sekali, saat tabel Pengguna masih kosong. Juga membuat kategori sistem & kelompok bawaan.",
     akses: "publik",
     field: [
       { nama: "username", ket: "3–30 huruf kecil/angka/._-", wajib: true },

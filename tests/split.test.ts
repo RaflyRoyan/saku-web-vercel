@@ -1,7 +1,17 @@
 import { describe, it, expect } from "vitest";
-import { MemorySheetStore } from "../server/sheets/memory-store";
 import { crc16 } from "../server/common/qris";
-import { siapkan } from "./helpers";
+import type { Operasi, Store } from "../server/db/store";
+import { barisDari, siapkan } from "./helpers";
+
+/** Batch berikutnya ditambah operasi yang pasti gagal (id dobel) di akhir: seluruh transaksi database harus batal. */
+function gagalkanBatchBerikutnya(store: Store) {
+  const asli = store.batch.bind(store);
+  store.batch = async (ops: readonly Operasi[]) => {
+    store.batch = asli;
+    const dobel = barisDari("Akun", ["AK-gagal", "Gagal"]);
+    return asli([...ops, { jenis: "insert", tabel: "Akun", baris: [dobel, dobel] }]);
+  };
+}
 
 type Peserta = { id: string; nama: string; saya: boolean; nominal: number; lunas: boolean; transaksiId: string | null };
 type Tr = { id: string; tipe: string; akunId: string; nominal: number; deskripsi: string; kodeSistem: string | null; kategoriId: string | null };
@@ -76,12 +86,11 @@ describe("split bill", () => {
     expect((await budi.put(`/split/${split.id}/peserta/${saya.id}/lunas`, { lunas: true })).status).toBe(422);
   });
 
-  it("spreadsheet lama tanpa kategori PATUNGAN → dibuat otomatis saat lunas", async () => {
+  it("data lama tanpa kategori PATUNGAN → dibuat otomatis saat lunas", async () => {
     const { budi, store, split, andi, trx } = await siapSplit();
-    const kat = (await store.readMany(["Kategori"])).Kategori;
-    const row = kat.rows.findIndex((r) => r.values.includes("PATUNGAN"));
-    expect(row).toBeGreaterThanOrEqual(0);
-    await store.deleteRow("Kategori", kat.rows[row].row);
+    const patungan = (await store.read(["Kategori"])).Kategori.find((r) => r.data.kode_sistem === "PATUNGAN");
+    expect(patungan).toBeDefined();
+    await store.deleteRow("Kategori", patungan!.data.id);
 
     const res = await budi.put(`/split/${split.id}/peserta/${andi().id}/lunas`, { lunas: true });
     expect(res.status).toBe(200);
@@ -168,20 +177,8 @@ describe("pengaturan QRIS", () => {
   });
 });
 
-describe("MemorySheetStore.deleteRows", () => {
-  it("hapus lintas sheet dengan nomor baris bacaan awal", async () => {
-    const store = new MemorySheetStore();
-    await store.append("Pengaturan", [["A"], ["B"], ["C"]]);
-    await store.deleteRows([
-      { sheet: "Pengaturan", row: 2 },
-      { sheet: "Pengaturan", row: 4 },
-    ]);
-    expect((await store.readMany(["Pengaturan"])).Pengaturan.rows.map((r) => r.values[0])).toEqual(["B"]);
-  });
-});
-
-describe("split bill: gagal di tengah tidak meninggalkan data tak bisa diperbaiki", () => {
-  it("POST: append Transaksi gagal → split & peserta tetap utuh, PUT membuat ulang transaksi keluar", async () => {
+describe("split bill: gagal di tengah → tidak ada yang tertulis (transaksi database)", () => {
+  it("POST gagal → 502, split & transaksi keluar tidak tersimpan; kirim ulang berhasil", async () => {
     const t = await siapkan();
     await t.budi.post("/periode/mulai", { tanggalMulai: "2026-10-25", saldoAwal: [{ akunId: t.akun.BCA, saldo: 1_000_000 }] });
     const body = {
@@ -193,49 +190,37 @@ describe("split bill: gagal di tengah tidak meninggalkan data tak bisa diperbaik
       peserta: [{ nama: "Saya", saya: true }, { nama: "Andi", saya: false }],
       items: [{ nama: "A", qty: 1, harga: 10_000, peserta: [0] }, { nama: "B", qty: 1, harga: 10_000, peserta: [1] }],
     };
-    const asli = t.store.append.bind(t.store);
-    t.store.append = async (sheet, rows) => {
-      if (sheet === "Transaksi") throw new Error("timeout");
-      return asli(sheet, rows);
-    };
-    expect((await t.budi.post("/split", body)).status).toBe(500);
-    t.store.append = asli;
+    gagalkanBatchBerikutnya(t.store);
+    expect((await t.budi.post("/split", body)).status).toBe(502);
+    expect((await t.budi.get("/split")).body).toEqual([]);
+    expect((await t.budi.get("/transaksi")).body.data).toEqual([]);
 
-    const [ringkas] = (await t.budi.get("/split")).body;
-    const detail = (await t.budi.get(`/split/${ringkas.id}`)).body;
-    expect(detail.peserta.map((p: Peserta) => p.nama)).toEqual(["Saya", "Andi"]);
-    const ubah = await t.budi.put(`/split/${ringkas.id}`, { ...body, peserta: detail.peserta.map((p: Peserta) => ({ id: p.id, nama: p.nama, saya: p.saya })) });
-    expect(ubah.status).toBe(200);
+    expect((await t.budi.post("/split", body)).status).toBe(201);
+    expect((await t.budi.get("/split")).body).toHaveLength(1);
     expect(((await t.budi.get("/transaksi")).body.data as Tr[]).filter((x) => x.tipe === "keluar")).toHaveLength(1);
   });
 
-  it("lunas: penulisan peserta gagal → tidak ada transaksi masuk yatim; retry membuat tepat 1", async () => {
+  it("lunas gagal → peserta tetap belum lunas tanpa transaksi masuk; retry membuat tepat 1", async () => {
     const { budi, store, split, andi, trx } = await siapSplit();
     const url = `/split/${split.id}/peserta/${andi().id}/lunas`;
-    const asli = store.updateRows.bind(store);
-    store.updateRows = async () => {
-      throw new Error("timeout");
-    };
-    expect((await budi.put(url, { lunas: true })).status).toBe(500);
-    store.updateRows = asli;
+    gagalkanBatchBerikutnya(store);
+    expect((await budi.put(url, { lunas: true })).status).toBe(502);
     expect((await trx()).filter((x) => x.tipe === "masuk")).toHaveLength(0);
-    expect((await budi.put(url, { lunas: true })).status).toBe(200);
-    expect((await trx()).filter((x) => x.tipe === "masuk")).toHaveLength(1);
-  });
+    expect((await budi.get(`/split/${split.id}`)).body.peserta[1].lunas).toBe(false);
 
-  it("lunas: append transaksi gagal setelah peserta ditandai → retry membuat ulang transaksi masuk", async () => {
-    const { budi, store, split, andi, trx } = await siapSplit();
-    const url = `/split/${split.id}/peserta/${andi().id}/lunas`;
-    const asli = store.append.bind(store);
-    store.append = async (sheet, rows) => {
-      if (sheet === "Transaksi") throw new Error("timeout");
-      return asli(sheet, rows);
-    };
-    expect((await budi.put(url, { lunas: true })).status).toBe(500);
-    store.append = asli;
     expect((await budi.put(url, { lunas: true })).status).toBe(200);
     const masuk = (await trx()).filter((x) => x.tipe === "masuk");
     expect(masuk).toHaveLength(1);
     expect((await budi.get(`/split/${split.id}`)).body.peserta[1].transaksiId).toBe(masuk[0].id);
+  });
+
+  it("tutup periode gagal → periode lama tetap aktif dan tabungan kosong", async () => {
+    const t = await siapkan();
+    await t.budi.post("/periode/mulai", { nama: "Okt", tanggalMulai: "2026-10-01", saldoAwal: [{ akunId: t.akun.BCA, saldo: 100_000 }] });
+    gagalkanBatchBerikutnya(t.store);
+    expect((await t.budi.post("/periode/mulai", { tanggalMulai: "2026-10-15" })).status).toBe(502);
+    expect((await t.budi.get("/periode/aktif")).body.nama).toBe("Okt");
+    expect((await t.store.read(["Tabungan"])).Tabungan).toEqual([]);
+    expect((await t.budi.get("/periode")).body).toHaveLength(1);
   });
 });

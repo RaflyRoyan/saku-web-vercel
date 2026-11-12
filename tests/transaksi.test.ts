@@ -210,8 +210,8 @@ describe("transaksi", () => {
     const satu = (await budi.get(`/transaksi?q=satu&periodeId=${lama}`)).body.data[0];
     const pindah = await budi.put(`/transaksi/${satu.id}`, { tipe: "keluar", akunId: akun.BCA, kategoriId: makan, nominal: 1_000, tanggal: "2026-10-16" });
     expect(pindah.body.periodeId).toBe(p2.body.periode.id);
-    const setor = () => store.dump().Tabungan!.filter((r) => r[3] === "setor").map((r) => r[6]);
-    expect(setor()).toEqual([-2_000]);
+    const setor = async () => (await store.read(["Tabungan"])).Tabungan.filter((r) => r.data.jenis === "setor").map((r) => r.data.nominal);
+    expect(await setor()).toEqual([-2_000]);
 
     expect((await budi.del(`/transaksi/${satu.id}`)).status).toBe(204);
     expect((await budi.get(`/transaksi/${satu.id}`)).status).toBe(404);
@@ -222,12 +222,8 @@ describe("transaksi", () => {
     await budi.post("/periode/mulai", { tanggalMulai: "2026-10-25" });
     const t = await budi.post("/transaksi", { tipe: "keluar", akunId: akun.BCA, kategoriId: makan, nominal: 1 });
     // Ubah baris langsung jadi transaksi tarik tabungan (normalnya dibuat endpoint tabungan di M5)
-    const grid = store.dump().Transaksi!;
-    const i = grid.findIndex((r) => r[0] === t.body.id);
-    const values = [...grid[i]];
-    values[4] = "masuk";
-    values[7] = tarik;
-    await store.updateRow("Transaksi", i + 1, values);
+    const row = (await store.read(["Transaksi"])).Transaksi.find((r) => r.data.id === t.body.id)!;
+    await store.updateRow("Transaksi", { ...row.data, tipe: "masuk", kategori_id: tarik });
     const body = { tipe: "masuk", akunId: akun.BCA, kategoriId: tarik, nominal: 2 };
     expect((await budi.put(`/transaksi/${t.body.id}`, body)).body.title).toBe("Ubah lewat menu Tabungan.");
     expect((await budi.del(`/transaksi/${t.body.id}`)).status).toBe(409);
@@ -242,18 +238,15 @@ describe("ubah periode & saldo awal", () => {
     expect(ubah.body).toMatchObject({ nama: "Gajian Okt", keterangan: "" });
 
     await budi.post("/periode/mulai", { tanggalMulai: "2026-10-15" });
-    const setor = () =>
-      store
-        .dump()
-        .Tabungan!.filter((r) => r[3] === "setor")
-        .map((r) => [r[5], r[6]]);
-    expect(setor()).toEqual([[akun.BCA, 100], [akun.GoPay, 50]]);
+    const setor = async () =>
+      (await store.read(["Tabungan"])).Tabungan.filter((r) => r.data.jenis === "setor").map((r) => [r.data.akun_id, r.data.nominal]);
+    expect(await setor()).toEqual([[akun.BCA, 100], [akun.GoPay, 50]]);
 
     expect((await budi.put(`/periode/${p1.id}/saldo-awal`, { saldoAwal: [{ akunId: akun.BCA, saldo: 300 }, { akunId: akun.Jago, saldo: 7 }] })).status).toBe(204);
     const r = (await budi.get(`/periode/${p1.id}/ringkasan`)).body;
     expect(r.totalSaldoAwal).toBe(307);
     // GoPay tidak dikirim → baris saldo awal dihapus, setor jadi 0 (bukan baris baru)
-    expect(setor()).toEqual([[akun.BCA, 300], [akun.GoPay, 0], [akun.Jago, 7]]);
+    expect(await setor()).toEqual([[akun.BCA, 300], [akun.GoPay, 0], [akun.Jago, 7]]);
     expect(r.setorTabungan).toHaveLength(3);
   });
 });

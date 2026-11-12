@@ -1,5 +1,5 @@
 import { AppError } from "../common/errors.js";
-import type { ParsedRow } from "../repositories/rows.js";
+import type { Row } from "../repositories/rows.js";
 
 export interface PeriodeDto {
   id: string;
@@ -11,7 +11,7 @@ export interface PeriodeDto {
 }
 
 export const periodeDto = (
-  p: Pick<ParsedRow<"Periode">["data"], "id" | "nama" | "tanggal_mulai" | "tanggal_selesai" | "keterangan">,
+  p: Pick<Row<"Periode">["data"], "id" | "nama" | "tanggal_mulai" | "tanggal_selesai" | "keterangan">,
 ): PeriodeDto => ({
   id: p.id,
   nama: p.nama,
@@ -22,7 +22,7 @@ export const periodeDto = (
 });
 
 /** Periode milik pengguna, terbaru di atas. */
-export function periodeMilik(periode: ParsedRow<"Periode">[], userId: string): ParsedRow<"Periode">[] {
+export function periodeMilik(periode: Row<"Periode">[], userId: string): Row<"Periode">[] {
   return periode
     .filter((p) => p.data.user_id === userId && p.data.tanggal_mulai)
     .sort((a, b) => (b.data.tanggal_mulai ?? "").localeCompare(a.data.tanggal_mulai ?? ""));
@@ -32,7 +32,7 @@ export function periodeMilik(periode: ParsedRow<"Periode">[], userId: string): P
  * Periode yang mencakup `tanggal`: tanggal_mulai ≤ tanggal ≤ (tanggal_selesai ?? ∞) (spec §7.2).
  * Tidak ketemu → 422.
  */
-export function periodeUntukTanggal(periode: ParsedRow<"Periode">[], userId: string, tanggal: string): ParsedRow<"Periode"> {
+export function periodeUntukTanggal(periode: Row<"Periode">[], userId: string, tanggal: string): Row<"Periode"> {
   const found = periodeMilik(periode, userId).find(
     ({ data: p }) => (p.tanggal_mulai ?? "") <= tanggal && (!p.tanggal_selesai || tanggal <= p.tanggal_selesai),
   );

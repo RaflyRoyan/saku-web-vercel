@@ -4,15 +4,15 @@ import type { AppEnv } from "../app.js";
 import { loadSession, requireAuth } from "../auth/session.js";
 import { nowWibIso, todayWib } from "../common/clock.js";
 import { jsonBody } from "../common/validation.js";
-import { findOwned, newId, newRow, rowsOf, updatedRow, type ParsedRow } from "../repositories/rows.js";
+import { findOwned, newId, newRow, rowsOf, updatedRow, type Row } from "../repositories/rows.js";
 import { deskripsiTagihan } from "../services/tagihan-qris.js";
 import { rencanaSetorTerdampak, simpanSetor } from "../services/tabungan.js";
 import { resolveTransaksi } from "../services/transaksi.js";
-import type { SheetData } from "../sheets/store.js";
+import type { DataTabel, Operasi } from "../db/store.js";
 
-const SHEETS = ["Akun", "AkunPengguna", "Kategori", "Periode", "SaldoAwal", "Transaksi", "Tabungan", "TagihanQris"] as const;
+const TABEL = ["Akun", "AkunPengguna", "Kategori", "Periode", "SaldoAwal", "Transaksi", "Tabungan", "TagihanQris"] as const;
 
-function parseAll(data: Record<(typeof SHEETS)[number], SheetData>) {
+function parseAll(data: DataTabel<(typeof TABEL)[number]>) {
   return {
     akun: rowsOf(data, "Akun"),
     akunPengguna: rowsOf(data, "AkunPengguna"),
@@ -25,10 +25,10 @@ function parseAll(data: Record<(typeof SHEETS)[number], SheetData>) {
   };
 }
 
-type Sheets = ReturnType<typeof parseAll>;
-type Tagihan = ParsedRow<"TagihanQris">["data"];
+type Isi = ReturnType<typeof parseAll>;
+type Tagihan = Row<"TagihanQris">["data"];
 
-function toDto(s: Pick<Sheets, "akun" | "kategori">, t: Tagihan) {
+function toDto(s: Pick<Isi, "akun" | "kategori">, t: Tagihan) {
   return {
     id: t.id,
     tanggal: t.tanggal ?? "",
@@ -68,7 +68,7 @@ tagihanQris.get("/", async (c) => {
 
 tagihanQris.post("/", jsonBody(tagihanBody), async (c) => {
   const body = c.req.valid("json");
-  const { user, data } = await loadSession(c, SHEETS);
+  const { user, data } = await loadSession(c, TABEL);
   const uid = user.data.id;
   const clock = c.var.clock;
   const s = parseAll(data);
@@ -101,7 +101,7 @@ tagihanQris.put(
   ),
   async (c) => {
     const body = c.req.valid("json");
-    const { user, data } = await loadSession(c, SHEETS);
+    const { user, data } = await loadSession(c, TABEL);
     const uid = user.data.id;
     const clock = c.var.clock;
     const s = parseAll(data);
@@ -121,36 +121,40 @@ tagihanQris.put(
       );
       const trId = newId("Transaksi", s.transaksi);
       const baru = { id: trId, user_id: uid, ...kolom, berulang_id: "", label: "" };
-      const after = [...s.transaksi, { row: 0, data: { ...baru, created_by: uid, created_at: nowWibIso(clock), updated_by: "", updated_at: null } }];
+      const after = [...s.transaksi, { data: { ...baru, created_by: uid, created_at: nowWibIso(clock), updated_by: "", updated_at: null } }];
       const setor = rencanaSetorTerdampak([kolom.periode_id], s.periode, s.saldoAwal, after, s.tabungan, uid, clock);
       const changes = { lunas: true, transaksi_id: trId };
-      // Tandai tagihan dulu, lalu transaksi: gagal di tengah tidak meninggalkan transaksi yatim (retry membuat ulang)
-      await store.updateRows([{ sheet: "TagihanQris", row: target.row, values: updatedRow("TagihanQris", t, changes, uid, clock) }]);
-      await store.append("Transaksi", [newRow("Transaksi", baru, uid, clock)]);
-      await simpanSetor(store, setor);
+      // Tandai tagihan + transaksi masuk + setor: satu transaksi database
+      await simpanSetor(store, setor, [
+        { jenis: "update", tabel: "TagihanQris", baris: updatedRow("TagihanQris", t, changes, uid, clock) },
+        { jenis: "insert", tabel: "Transaksi", baris: [newRow("Transaksi", baru, uid, clock)] },
+      ]);
       return c.json(toDto(s, { ...t, ...changes }));
     }
 
     const after = s.transaksi.filter((r) => r !== masuk);
     const setor = rencanaSetorTerdampak(masuk ? [masuk.data.periode_id] : [], s.periode, s.saldoAwal, after, s.tabungan, uid, clock);
     const changes = { lunas: false, transaksi_id: "" };
-    await simpanSetor(store, setor, [{ sheet: "TagihanQris", row: target.row, values: updatedRow("TagihanQris", t, changes, uid, clock) }]);
-    if (masuk) await store.deleteRow("Transaksi", masuk.row);
+    await simpanSetor(store, setor, [
+      { jenis: "update", tabel: "TagihanQris", baris: updatedRow("TagihanQris", t, changes, uid, clock) },
+      ...(masuk ? [{ jenis: "delete", tabel: "Transaksi", id: masuk.data.id } as Operasi] : []),
+    ]);
     return c.json(toDto(s, { ...t, ...changes }));
   },
 );
 
 /** Batalkan tagihan. Kalau sudah lunas, transaksi masuknya ikut terhapus. */
 tagihanQris.delete("/:id", async (c) => {
-  const { user, data } = await loadSession(c, SHEETS);
+  const { user, data } = await loadSession(c, TABEL);
   const uid = user.data.id;
   const s = parseAll(data);
   const target = findOwned(s.tagihan, c.req.param("id"), uid);
   const masuk = s.transaksi.find((r) => r.data.id === target.data.transaksi_id);
   const after = s.transaksi.filter((r) => r !== masuk);
   const setor = rencanaSetorTerdampak(masuk ? [masuk.data.periode_id] : [], s.periode, s.saldoAwal, after, s.tabungan, uid, c.var.clock);
-  const store = c.var.store();
-  await simpanSetor(store, setor);
-  await store.deleteRows([...(masuk ? [{ sheet: "Transaksi" as const, row: masuk.row }] : []), { sheet: "TagihanQris", row: target.row }]);
+  await simpanSetor(c.var.store(), setor, [
+    ...(masuk ? [{ jenis: "delete", tabel: "Transaksi", id: masuk.data.id } as Operasi] : []),
+    { jenis: "delete", tabel: "TagihanQris", id: target.data.id },
+  ]);
   return c.body(null, 204);
 });

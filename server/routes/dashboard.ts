@@ -11,15 +11,15 @@ import { totalTabungan } from "../services/tabungan.js";
 import { transaksiMapper, urutTransaksi } from "../services/transaksi.js";
 import { pengingatDto } from "./berulang.js";
 
-const SHEETS = ["Akun", "AkunPengguna", "Kategori", "KelompokKategori", "Periode", "SaldoAwal", "Transaksi", "Tabungan", "Berulang", "BerulangLewati", "Anggaran"] as const;
+const TABEL = ["Akun", "AkunPengguna", "Kategori", "KelompokKategori", "Periode", "SaldoAwal", "Transaksi", "Tabungan", "Berulang", "BerulangLewati", "Anggaran"] as const;
 
 export const dashboard = new Hono<AppEnv>();
 
 dashboard.use(requireAuth);
 
-/** Ringkasan periode aktif (atau null) + total tabungan + pengingat + 5 transaksi terakhir (spec §10.9). Satu batchGet. */
+/** Ringkasan periode aktif (atau null) + total tabungan + pengingat + 5 transaksi terakhir (spec §10.9). Satu kali baca. */
 dashboard.get("/", async (c) => {
-  const { user, data } = await loadSession(c, SHEETS);
+  const { user, data } = await loadSession(c, TABEL);
   const uid = user.data.id;
   const s = {
     akun: rowsOf(data, "Akun"),

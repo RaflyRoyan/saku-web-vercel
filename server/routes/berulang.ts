@@ -5,7 +5,7 @@ import { loadSession, requireAuth } from "../auth/session.js";
 import { nowWibIso, todayWib } from "../common/clock.js";
 import { AppError, validationError, type FieldErrors } from "../common/errors.js";
 import { jsonBody } from "../common/validation.js";
-import { findOwned, newId, newRow, rowsOf, updatedRow, type ParsedRow } from "../repositories/rows.js";
+import { findOwned, newId, newRow, rowsOf, updatedRow, type Row } from "../repositories/rows.js";
 import {
   addMonths,
   berlaku,
@@ -20,7 +20,7 @@ import { pesanBelumDipilih, pilihanAkun } from "../services/akun-pengguna.js";
 import { peringatanAnggaran } from "../services/anggaran.js";
 import { rencanaSetorTerdampak, simpanSetor } from "../services/tabungan.js";
 import { peringatanSaldo, resolveTransaksi, transaksiMapper } from "../services/transaksi.js";
-import type { SheetData } from "../sheets/store.js";
+import type { DataTabel } from "../db/store.js";
 
 const bulanSchema = z.string({ error: "Bulan wajib diisi." }).regex(/^\d{4}-(0[1-9]|1[0-2])$/, { error: "Format bulan harus yyyy-MM." });
 const tanggalSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, { error: "Format tanggal harus yyyy-MM-dd." });
@@ -50,9 +50,9 @@ const berulangBody = z.object({
   selesai: bulanSchema.nullish(),
 });
 
-const SHEETS = ["Akun", "AkunPengguna", "Kategori", "Periode", "SaldoAwal", "Transaksi", "Tabungan", "Berulang", "BerulangLewati"] as const;
+const TABEL = ["Akun", "AkunPengguna", "Kategori", "Periode", "SaldoAwal", "Transaksi", "Tabungan", "Berulang", "BerulangLewati"] as const;
 
-function parseAll(data: Record<(typeof SHEETS)[number], SheetData>) {
+function parseAll(data: DataTabel<(typeof TABEL)[number]>) {
   return {
     akun: rowsOf(data, "Akun"),
     akunPengguna: rowsOf(data, "AkunPengguna"),
@@ -66,8 +66,8 @@ function parseAll(data: Record<(typeof SHEETS)[number], SheetData>) {
   };
 }
 
-type Sheets = ReturnType<typeof parseAll>;
-type B = ParsedRow<"Berulang">["data"];
+type Isi = ReturnType<typeof parseAll>;
+type B = Row<"Berulang">["data"];
 
 export interface BerulangDto {
   id: string;
@@ -91,7 +91,7 @@ export interface BerulangDto {
   berlaku: boolean;
 }
 
-function mapper(s: Sheets, pengingat: Pengingat[], hari: string) {
+function mapper(s: Isi, pengingat: Pengingat[], hari: string) {
   const namaAkun = new Map(s.akun.map((a) => [a.data.id, a.data.nama]));
   const namaKat = new Map(s.kategori.map((k) => [k.data.id, k.data.nama]));
   return (b: B): BerulangDto => {
@@ -124,7 +124,7 @@ function mapper(s: Sheets, pengingat: Pengingat[], hari: string) {
 }
 
 /** Pengingat lengkap dengan data langganannya (spec §10.7 `[{ berulang, bulan, jatuhTempo, status, sisaHari }]`). */
-export function pengingatDto(s: Sheets, userId: string, hari: string) {
+export function pengingatDto(s: Isi, userId: string, hari: string) {
   const list = hitungPengingat(s.berulang, s.transaksi, s.lewati, userId, hari);
   const toDto = mapper(s, list, hari);
   const byId = new Map(s.berulang.map((b) => [b.data.id, b.data]));
@@ -132,7 +132,7 @@ export function pengingatDto(s: Sheets, userId: string, hari: string) {
 }
 
 /** Akun aktif & kategori `keluar` aktif bukan kategori sistem (spec §5.2 Berulang, §7.1). */
-function cekMaster(s: Sheets, userId: string, body: z.infer<typeof berulangBody>, current?: B) {
+function cekMaster(s: Isi, userId: string, body: z.infer<typeof berulangBody>, current?: B) {
   const errors: FieldErrors = {};
   const a = s.akun.find((r) => r.data.id === body.akunId)?.data;
   if (!a) errors.akunId = ["Akun tidak ditemukan."];
@@ -166,7 +166,7 @@ berulang.use(requireAuth);
 
 berulang.get("/", async (c) => {
   const termasukNonaktif = c.req.query("termasukNonaktif") === "true";
-  const { user, data } = await loadSession(c, SHEETS);
+  const { user, data } = await loadSession(c, TABEL);
   const uid = user.data.id;
   const s = parseAll(data);
   const hari = todayWib(c.var.clock);
@@ -182,13 +182,13 @@ berulang.get("/", async (c) => {
 berulang.get("/pengingat", async (c) => {
   const tanggal = c.req.query("tanggal");
   if (tanggal && !tanggalSchema.safeParse(tanggal).success) throw validationError({ tanggal: ["Format tanggal harus yyyy-MM-dd."] });
-  const { user, data } = await loadSession(c, SHEETS);
+  const { user, data } = await loadSession(c, TABEL);
   return c.json(pengingatDto(parseAll(data), user.data.id, tanggal ?? todayWib(c.var.clock)));
 });
 
 berulang.post("/", jsonBody(berulangBody), async (c) => {
   const body = c.req.valid("json");
-  const { user, data } = await loadSession(c, SHEETS);
+  const { user, data } = await loadSession(c, TABEL);
   const uid = user.data.id;
   const s = parseAll(data);
   cekMaster(s, uid, body);
@@ -201,13 +201,13 @@ berulang.post("/", jsonBody(berulangBody), async (c) => {
 
 berulang.put("/:id", jsonBody(berulangBody.extend({ aktif: z.boolean({ error: "Aktif harus true/false." }) })), async (c) => {
   const body = c.req.valid("json");
-  const { user, data } = await loadSession(c, SHEETS);
+  const { user, data } = await loadSession(c, TABEL);
   const uid = user.data.id;
   const s = parseAll(data);
   const target = findOwned(s.berulang, c.req.param("id"), uid);
   cekMaster(s, uid, body, target.data);
   const changes = { ...kolom(body), aktif: body.aktif };
-  await c.var.store().updateRow("Berulang", target.row, updatedRow("Berulang", target.data, changes, uid, c.var.clock));
+  await c.var.store().updateRow("Berulang", updatedRow("Berulang", target.data, changes, uid, c.var.clock));
   const hari = todayWib(c.var.clock);
   return c.json(mapper(s, [], hari)({ ...target.data, ...changes }));
 });
@@ -228,7 +228,7 @@ berulang.post(
   ),
   async (c) => {
     const body = c.req.valid("json");
-    const { user, data } = await loadSession(c, [...SHEETS, "KelompokKategori", "Anggaran"]);
+    const { user, data } = await loadSession(c, [...TABEL, "KelompokKategori", "Anggaran"]);
     const uid = user.data.id;
     const clock = c.var.clock;
     const s = parseAll(data);
@@ -246,12 +246,10 @@ berulang.post(
     );
     const baru = { id: newId("Transaksi", s.transaksi), user_id: uid, ...kolomTr, berulang_id: b.id, label: "" };
     const full = { ...baru, created_by: uid, created_at: nowWibIso(clock), updated_by: "", updated_at: null };
-    const after = [...s.transaksi, { row: 0, data: full }];
+    const after = [...s.transaksi, { data: full }];
     const setor = rencanaSetorTerdampak([kolomTr.periode_id], s.periode, s.saldoAwal, after, s.tabungan, uid, clock);
 
-    const store = c.var.store();
-    await store.append("Transaksi", [newRow("Transaksi", baru, uid, clock)]);
-    await simpanSetor(store, setor);
+    await simpanSetor(c.var.store(), setor, [{ jenis: "insert", tabel: "Transaksi", baris: [newRow("Transaksi", baru, uid, clock)] }]);
     const dto = transaksiMapper(s.akun, s.kategori)(full);
     const peringatan = [
       ...peringatanSaldo(full, s.saldoAwal, after, s.akun),
@@ -263,7 +261,7 @@ berulang.post(
 
 berulang.post("/:id/lewati", jsonBody(z.object({ bulan: bulanSchema })), async (c) => {
   const { bulan } = c.req.valid("json");
-  const { user, data } = await loadSession(c, SHEETS);
+  const { user, data } = await loadSession(c, TABEL);
   const uid = user.data.id;
   const s = parseAll(data);
   const b = findOwned(s.berulang, c.req.param("id"), uid).data;
@@ -280,6 +278,6 @@ berulang.delete("/:id/lewati/:bulan", async (c) => {
   const b = findOwned(rowsOf(data, "Berulang"), c.req.param("id"), uid).data;
   const row = dilewati(b, c.req.param("bulan"), rowsOf(data, "BerulangLewati"));
   if (!row) throw new AppError(404, "Data tidak ditemukan.");
-  await c.var.store().deleteRow("BerulangLewati", row.row);
+  await c.var.store().deleteRow("BerulangLewati", row.data.id);
   return c.body(null, 204);
 });

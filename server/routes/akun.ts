@@ -5,10 +5,11 @@ import { loadSession, requireAdmin, requireAuth } from "../auth/session.js";
 import { AppError, validationError } from "../common/errors.js";
 import { formatRupiah } from "../common/format.js";
 import { jsonBody } from "../common/validation.js";
-import { newId, newRow, notFound, rowsOf, updatedRow, type ParsedRow } from "../repositories/rows.js";
+import { newId, newRow, notFound, rowsOf, updatedRow, type Row } from "../repositories/rows.js";
 import { pilihanAkun } from "../services/akun-pengguna.js";
 import { periodeAktif, saldoAkunSemuaPengguna, saldoPerAkun } from "../services/saldo.js";
-import type { CellValue, RowUpdate } from "../sheets/store.js";
+import type { Baris } from "../db/schema.js";
+import type { Operasi, RowUpdate } from "../db/store.js";
 
 // Akun = master bersama semua pengguna; hanya admin yang menulis (02 §2).
 
@@ -45,14 +46,14 @@ export interface PilihanAkunDto {
 }
 
 /** Nama unik (case-insensitive) di antara akun aktif. */
-function assertNamaFree(rows: ParsedRow<"Akun">[], nama: string, exceptId?: string) {
+function assertNamaFree(rows: Row<"Akun">[], nama: string, exceptId?: string) {
   const n = nama.toLowerCase();
   if (rows.some((r) => r.data.aktif && r.data.id !== exceptId && r.data.nama.toLowerCase() === n)) {
     throw new AppError(409, "Nama akun sudah dipakai.", { nama: ["Nama akun sudah dipakai."] });
   }
 }
 
-function findAkun(rows: ParsedRow<"Akun">[], id: string) {
+function findAkun(rows: Row<"Akun">[], id: string) {
   const found = rows.find((r) => r.data.id === id);
   if (!found) throw notFound();
   return found;
@@ -151,22 +152,22 @@ akun.put(
     }
 
     // Baris yang akunnya tetap dipilih cukup diperbarui urutannya; baris sisa dipakai ulang untuk akun baru
-    const lama = new Map<string, ParsedRow<"AkunPengguna">>();
-    const sisa: ParsedRow<"AkunPengguna">[] = [];
+    const lama = new Map<string, Row<"AkunPengguna">>();
+    const sisa: Row<"AkunPengguna">[] = [];
     for (const r of pilihan.baris) {
       if (kirim.has(r.data.akun_id) && !lama.has(r.data.akun_id)) lama.set(r.data.akun_id, r);
       else sisa.push(r);
     }
 
-    const updates: RowUpdate[] = [];
-    const appends: CellValue[][] = [];
+    const updates: Operasi[] = [];
+    const appends: Baris<"AkunPengguna">[] = [];
     const taken: { data: { id: string } }[] = [...semuaBaris];
     ids.forEach((akunId, i) => {
       const urutan = i + 1;
       const r = lama.get(akunId) ?? sisa.shift();
       if (r) {
         if (r.data.akun_id !== akunId || r.data.urutan !== urutan) {
-          updates.push({ sheet: "AkunPengguna", row: r.row, values: updatedRow("AkunPengguna", r.data, { akun_id: akunId, urutan }, uid, clock) });
+          updates.push({ jenis: "update", tabel: "AkunPengguna", baris: updatedRow("AkunPengguna", r.data, { akun_id: akunId, urutan }, uid, clock) });
         }
         return;
       }
@@ -175,11 +176,11 @@ akun.put(
       appends.push(newRow("AkunPengguna", { id, user_id: uid, akun_id: akunId, urutan }, uid, clock));
     });
 
-    const store = c.var.store();
-    await store.updateRows(updates);
-    await store.append("AkunPengguna", appends);
-    // Hapus dari bawah supaya nomor baris yang lain tidak bergeser
-    for (const r of sisa.sort((a, b) => b.row - a.row)) await store.deleteRow("AkunPengguna", r.row);
+    await c.var.store().batch([
+      ...updates,
+      ...(appends.length ? [{ jenis: "insert", tabel: "AkunPengguna", baris: appends } as Operasi] : []),
+      ...sisa.map((r) => ({ jenis: "delete", tabel: "AkunPengguna", id: r.data.id }) as Operasi),
+    ]);
     return c.body(null, 204);
   },
 );
@@ -215,7 +216,7 @@ akun.put(
     ids.forEach((id, i) => {
       const r = findAkun(rows, id);
       if (r.data.urutan !== i + 1) {
-        updates.push({ sheet: "Akun", row: r.row, values: updatedRow("Akun", r.data, { urutan: i + 1 }, user.data.id, c.var.clock) });
+        updates.push({ tabel: "Akun", baris: updatedRow("Akun", r.data, { urutan: i + 1 }, user.data.id, c.var.clock) });
       }
     });
     await c.var.store().updateRows(updates);
@@ -231,13 +232,14 @@ akun.put("/:id", jsonBody(z.object({ nama: namaSchema, jenis: jenisSchema, uruta
   const target = findAkun(rows, c.req.param("id"));
   if (target.data.aktif) assertNamaFree(rows, body.nama, target.data.id);
 
-  await c.var.store().updateRow("Akun", target.row, updatedRow("Akun", target.data, body, user.data.id, c.var.clock));
+  await c.var.store().updateRow("Akun", updatedRow("Akun", target.data, body, user.data.id, c.var.clock));
   return c.body(null, 204);
 });
 
 akun.put("/:id/aktif", jsonBody(z.object({ aktif: z.boolean({ error: "Aktif harus true/false." }) })), async (c) => {
   const { aktif } = c.req.valid("json");
-  const { user, data } = await loadSession(c, ["Akun", "Periode", "SaldoAwal", "Transaksi"]);
+  // Saldo dicek di periode aktif semua pengguna, jadi baca data semua pengguna
+  const { user, data } = await loadSession(c, ["Akun", "Periode", "SaldoAwal", "Transaksi"], { semuaPengguna: true });
   requireAdmin(user);
   const rows = rowsOf(data, "Akun");
   const target = findAkun(rows, c.req.param("id"));
@@ -257,7 +259,7 @@ akun.put("/:id/aktif", jsonBody(z.object({ aktif: z.boolean({ error: "Aktif haru
   }
 
   if (target.data.aktif !== aktif) {
-    await c.var.store().updateRow("Akun", target.row, updatedRow("Akun", target.data, { aktif }, user.data.id, c.var.clock));
+    await c.var.store().updateRow("Akun", updatedRow("Akun", target.data, { aktif }, user.data.id, c.var.clock));
   }
   return c.body(null, 204);
 });

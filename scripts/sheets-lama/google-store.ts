@@ -1,5 +1,5 @@
 import { auth, sheets, type sheets_v4 } from "@googleapis/sheets";
-import { storageError } from "../common/errors.js";
+import { storageError } from "../../server/common/errors.js";
 import { lastColumn, type SheetName } from "./schema.js";
 import { SheetMissingError, type CellValue, type RowUpdate, type SheetData, type SheetStore } from "./store.js";
 

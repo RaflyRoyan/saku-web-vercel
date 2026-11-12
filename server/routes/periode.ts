@@ -6,14 +6,15 @@ import { todayWib } from "../common/clock.js";
 import { AppError, validationError, type FieldErrors } from "../common/errors.js";
 import { formatRupiah } from "../common/format.js";
 import { jsonBody } from "../common/validation.js";
-import { findOwned, newId, newRow, rowsOf, updatedRow, type ParsedRow } from "../repositories/rows.js";
+import { findOwned, newId, newRow, rowsOf, updatedRow, type Row } from "../repositories/rows.js";
 import { pesanBelumDipilih, pilihanAkun, type PilihanAkun } from "../services/akun-pengguna.js";
 import { anggaranMilik, cekAnggaran, hitungAnggaran, salinAnggaran } from "../services/anggaran.js";
 import { addDays, namaDefault, periodeDto, periodeMilik } from "../services/periode.js";
 import { hitungRingkasan } from "../services/ringkasan.js";
 import { periodeAktif, saldoPerAkun } from "../services/saldo.js";
-import { rencanaSetor, rencanaSetorTerdampak, simpanSetor, totalTabungan } from "../services/tabungan.js";
-import type { CellValue, RowUpdate } from "../sheets/store.js";
+import { opsSetor, rencanaSetor, rencanaSetorTerdampak, simpanSetor, totalTabungan } from "../services/tabungan.js";
+import type { Baris } from "../db/schema.js";
+import type { Operasi } from "../db/store.js";
 
 const tanggalSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, { error: "Format tanggal harus yyyy-MM-dd." });
 const namaSchema = z
@@ -41,7 +42,7 @@ type SaldoAwalInput = z.infer<typeof saldoAwalSchema>;
  * Saldo 0 tidak disimpan, jadi akun yang tidak dipilih boleh dikirim dengan saldo 0.
  * `boleh` = akun yang sudah punya saldo awal di periode itu (saat edit) tetap boleh walau nonaktif/dilepas.
  */
-function cekSaldoAwal(items: SaldoAwalInput, akun: ParsedRow<"Akun">[], pilihan: PilihanAkun, boleh: Set<string> = new Set()) {
+function cekSaldoAwal(items: SaldoAwalInput, akun: Row<"Akun">[], pilihan: PilihanAkun, boleh: Set<string> = new Set()) {
   const errors: FieldErrors = {};
   const seen = new Set<string>();
   items.forEach((item, i) => {
@@ -56,7 +57,7 @@ function cekSaldoAwal(items: SaldoAwalInput, akun: ParsedRow<"Akun">[], pilihan:
   if (Object.keys(errors).length) throw validationError(errors);
 }
 
-const saldoAwalDto = (rows: ParsedRow<"SaldoAwal">[], periodeId: string) =>
+const saldoAwalDto = (rows: Row<"SaldoAwal">[], periodeId: string) =>
   rows.filter((r) => r.data.periode_id === periodeId).map((r) => ({ akunId: r.data.akun_id, saldo: r.data.saldo ?? 0 }));
 
 export const periode = new Hono<AppEnv>();
@@ -138,7 +139,7 @@ periode.post(
     const selesai = addDays(tanggalMulai, -1);
     cekSaldoAwal(body.saldoAwal, akun, pilihanAkun(rowsOf(data, "AkunPengguna"), uid));
 
-    let tutup: ParsedRow<"Periode"> | undefined;
+    let tutup: Row<"Periode"> | undefined;
     let tetapDiLama = 0;
     const aktif = periodeAktif(semuaPeriode, uid);
     // Sumber salinan anggaran = periode terakhir sebelum periode baru
@@ -177,15 +178,16 @@ periode.post(
       if (Object.keys(errors).length) throw validationError(errors);
     }
 
-    const store = c.var.store();
+    // Tutup periode lama + setor tabungan + periode baru + saldo awal + salinan anggaran: satu transaksi database
+    const ops: Operasi[] = [];
     let setor: { akunId: string; nominal: number }[] = [];
     if (tutup) {
       const closed = { ...tutup.data, tanggal_selesai: selesai };
       const plan = rencanaSetor(closed, saldoAwal, transaksi, tabungan, uid, clock, teruskan);
       setor = plan.setor;
-      await simpanSetor(store, plan);
+      ops.push(...opsSetor(plan));
       if (tutup.data.tanggal_selesai !== selesai) {
-        await store.updateRow("Periode", tutup.row, updatedRow("Periode", tutup.data, { tanggal_selesai: selesai }, uid, clock));
+        ops.push({ jenis: "update", tabel: "Periode", baris: updatedRow("Periode", tutup.data, { tanggal_selesai: selesai }, uid, clock) });
       }
     }
 
@@ -197,24 +199,25 @@ periode.post(
       tanggal_selesai: null,
       keterangan: body.keterangan ?? "",
     };
-    await store.append("Periode", [newRow("Periode", baru, uid, clock)]);
+    ops.push({ jenis: "insert", tabel: "Periode", baris: [newRow("Periode", baru, uid, clock)] });
 
     // Saldo 0 tidak dibuatkan baris, sama seperti akun yang tidak dikirim
     const taken = [...saldoAwal];
-    const rows: CellValue[][] = [];
+    const rows: Baris<"SaldoAwal">[] = [];
     for (const item of body.saldoAwal.filter((s) => s.saldo > 0)) {
       const id = newId("SaldoAwal", taken);
-      taken.push({ row: 0, data: { id } as ParsedRow<"SaldoAwal">["data"] });
+      taken.push({ data: { id } as Row<"SaldoAwal">["data"] });
       rows.push(newRow("SaldoAwal", { id, user_id: uid, periode_id: baru.id, akun_id: item.akunId, saldo: item.saldo }, uid, clock));
     }
-    if (rows.length) await store.append("SaldoAwal", rows);
+    if (rows.length) ops.push({ jenis: "insert", tabel: "SaldoAwal", baris: rows });
 
     let anggaranDisalin = 0;
     if (body.salinAnggaran && sebelumnya) {
       const salin = salinAnggaran(rowsOf(data, "Anggaran"), uid, sebelumnya.data.id, baru.id, rowsOf(data, "Kategori"), rowsOf(data, "KelompokKategori"), clock);
-      if (salin.length) await store.append("Anggaran", salin);
+      if (salin.length) ops.push({ jenis: "insert", tabel: "Anggaran", baris: salin });
       anggaranDisalin = salin.length;
     }
+    await c.var.store().batch(ops);
 
     const tanpaSetorLama = tabungan.filter((t) => !(t.data.jenis === "setor" && t.data.periode_id === tutup?.data.id));
     return c.json(
@@ -235,7 +238,7 @@ periode.put("/:id", jsonBody(z.object({ nama: namaSchema, keterangan: keterangan
   const body = c.req.valid("json");
   const { user, data } = await loadSession(c, ["Periode"]);
   const target = findOwned(rowsOf(data, "Periode"), c.req.param("id"), user.data.id);
-  await c.var.store().updateRow("Periode", target.row, updatedRow("Periode", target.data, body, user.data.id, c.var.clock));
+  await c.var.store().updateRow("Periode", updatedRow("Periode", target.data, body, user.data.id, c.var.clock));
   return c.json(periodeDto({ ...target.data, ...body }));
 });
 
@@ -251,37 +254,37 @@ periode.put("/:id/saldo-awal", jsonBody(z.object({ saldoAwal: saldoAwalSchema })
   const milik = saldoAwal.filter((r) => r.data.user_id === uid && r.data.periode_id === target.data.id);
   cekSaldoAwal(items, rowsOf(data, "Akun"), pilihanAkun(rowsOf(data, "AkunPengguna"), uid), new Set(milik.map((r) => r.data.akun_id)));
 
-  const updates: RowUpdate[] = [];
-  const appends: CellValue[][] = [];
-  const hapus: number[] = [];
-  const after: ParsedRow<"SaldoAwal">[] = saldoAwal.filter((r) => !milik.includes(r));
+  const updates: Operasi[] = [];
+  const appends: Baris<"SaldoAwal">[] = [];
+  const hapus: string[] = [];
+  const after: Row<"SaldoAwal">[] = saldoAwal.filter((r) => !milik.includes(r));
   const taken = [...saldoAwal];
   const kirim = new Map(items.filter((s) => s.saldo > 0).map((s) => [s.akunId, s.saldo]));
 
   for (const r of milik) {
     const saldo = kirim.get(r.data.akun_id);
     if (saldo === undefined) {
-      hapus.push(r.row);
+      hapus.push(r.data.id);
       continue;
     }
     kirim.delete(r.data.akun_id);
-    after.push({ row: r.row, data: { ...r.data, saldo } });
-    if (r.data.saldo !== saldo) updates.push({ sheet: "SaldoAwal", row: r.row, values: updatedRow("SaldoAwal", r.data, { saldo }, uid, clock) });
+    after.push({ data: { ...r.data, saldo } });
+    if (r.data.saldo !== saldo) updates.push({ jenis: "update", tabel: "SaldoAwal", baris: updatedRow("SaldoAwal", r.data, { saldo }, uid, clock) });
   }
   for (const [akunId, saldo] of kirim) {
     const id = newId("SaldoAwal", taken);
     const d = { id, user_id: uid, periode_id: target.data.id, akun_id: akunId, saldo };
-    taken.push({ row: 0, data: d as ParsedRow<"SaldoAwal">["data"] });
-    after.push({ row: 0, data: d as ParsedRow<"SaldoAwal">["data"] });
+    taken.push({ data: d as Row<"SaldoAwal">["data"] });
+    after.push({ data: d as Row<"SaldoAwal">["data"] });
     appends.push(newRow("SaldoAwal", d, uid, clock));
   }
 
   const setor = rencanaSetorTerdampak([target.data.id], semuaPeriode, after, rowsOf(data, "Transaksi"), rowsOf(data, "Tabungan"), uid, clock);
-  const store = c.var.store();
-  await simpanSetor(store, setor, updates);
-  if (appends.length) await store.append("SaldoAwal", appends);
-  // Hapus dari bawah supaya nomor baris yang lain tidak bergeser
-  for (const row of hapus.sort((a, b) => b - a)) await store.deleteRow("SaldoAwal", row);
+  await simpanSetor(c.var.store(), setor, [
+    ...updates,
+    ...(appends.length ? [{ jenis: "insert", tabel: "SaldoAwal", baris: appends } as Operasi] : []),
+    ...hapus.map((id) => ({ jenis: "delete", tabel: "SaldoAwal", id }) as Operasi),
+  ]);
   return c.body(null, 204);
 });
 
@@ -302,11 +305,11 @@ periode.get("/:id/ringkasan", async (c) => {
   );
 });
 
-const ANGGARAN_SHEETS = ["Kategori", "KelompokKategori", "Periode", "Transaksi", "Anggaran"] as const;
+const ANGGARAN_TABEL = ["Kategori", "KelompokKategori", "Periode", "Transaksi", "Anggaran"] as const;
 
 /** Anggaran vs realisasi per kategori induk & sub kategori. */
 periode.get("/:id/anggaran", async (c) => {
-  const { user, data } = await loadSession(c, ANGGARAN_SHEETS);
+  const { user, data } = await loadSession(c, ANGGARAN_TABEL);
   const target = findOwned(rowsOf(data, "Periode"), c.req.param("id"), user.data.id);
   return c.json(
     hitungAnggaran(target.data.id, user.data.id, rowsOf(data, "Anggaran"), rowsOf(data, "Kategori"), rowsOf(data, "KelompokKategori"), rowsOf(data, "Transaksi")),
@@ -332,7 +335,7 @@ periode.put(
   ),
   async (c) => {
     const { items } = c.req.valid("json");
-    const { user, data } = await loadSession(c, ANGGARAN_SHEETS);
+    const { user, data } = await loadSession(c, ANGGARAN_TABEL);
     const uid = user.data.id;
     const clock = c.var.clock;
     const target = findOwned(rowsOf(data, "Periode"), c.req.param("id"), uid);
@@ -346,35 +349,35 @@ periode.put(
     const kirim = new Map(
       items.filter((i) => i.nominal > 0).map((i) => [i.kategoriId ? `k:${i.kategoriId}` : `g:${i.kelompokId}`, i]),
     );
-    const updates: RowUpdate[] = [];
-    const appends: CellValue[][] = [];
-    const hapus: number[] = [];
+    const updates: Operasi[] = [];
+    const appends: Baris<"Anggaran">[] = [];
+    const hapus: string[] = [];
     const after = semua.filter((r) => !milik.includes(r));
     const taken: { data: { id: string } }[] = [...semua];
 
     for (const r of milik) {
       const item = kirim.get(kunci(r.data));
       if (!item) {
-        hapus.push(r.row);
+        hapus.push(r.data.id);
         continue;
       }
       kirim.delete(kunci(r.data));
-      after.push({ row: r.row, data: { ...r.data, nominal: item.nominal } });
-      if (r.data.nominal !== item.nominal) updates.push({ sheet: "Anggaran", row: r.row, values: updatedRow("Anggaran", r.data, { nominal: item.nominal }, uid, clock) });
+      after.push({ data: { ...r.data, nominal: item.nominal } });
+      if (r.data.nominal !== item.nominal) updates.push({ jenis: "update", tabel: "Anggaran", baris: updatedRow("Anggaran", r.data, { nominal: item.nominal }, uid, clock) });
     }
     for (const item of kirim.values()) {
       const id = newId("Anggaran", taken);
       taken.push({ data: { id } });
       const d = { id, user_id: uid, periode_id: target.data.id, kelompok_id: item.kategoriId ? "" : (item.kelompokId ?? ""), kategori_id: item.kategoriId ?? "", nominal: item.nominal };
-      after.push({ row: 0, data: d as ParsedRow<"Anggaran">["data"] });
+      after.push({ data: d as Row<"Anggaran">["data"] });
       appends.push(newRow("Anggaran", d, uid, clock));
     }
 
-    const store = c.var.store();
-    if (updates.length) await store.updateRows(updates);
-    if (appends.length) await store.append("Anggaran", appends);
-    // Hapus dari bawah supaya nomor baris yang lain tidak bergeser
-    for (const row of hapus.sort((a, b) => b - a)) await store.deleteRow("Anggaran", row);
+    await c.var.store().batch([
+      ...updates,
+      ...(appends.length ? [{ jenis: "insert", tabel: "Anggaran", baris: appends } as Operasi] : []),
+      ...hapus.map((id) => ({ jenis: "delete", tabel: "Anggaran", id }) as Operasi),
+    ]);
     return c.json(hitungAnggaran(target.data.id, uid, after, kategori, kelompok, rowsOf(data, "Transaksi")));
   },
 );

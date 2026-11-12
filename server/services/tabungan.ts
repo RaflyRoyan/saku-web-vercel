@@ -1,13 +1,14 @@
 import type { Clock } from "../common/clock.js";
-import { newId, newRow, updatedRow, type ParsedRow } from "../repositories/rows.js";
-import type { CellValue, RowUpdate, SheetStore } from "../sheets/store.js";
+import type { Baris } from "../db/schema.js";
+import type { Operasi, RowUpdate, Store } from "../db/store.js";
+import { newId, newRow, updatedRow, type Row } from "../repositories/rows.js";
 import { saldoPerAkun } from "./saldo.js";
 
 export interface SetorPlan {
   /** Baris setor yang sudah ada dan nilainya berubah. */
   updates: RowUpdate[];
-  /** Baris setor baru untuk sheet `Tabungan`. */
-  appends: CellValue[][];
+  /** Baris setor baru untuk tabel `Tabungan`. */
+  appends: Baris<"Tabungan">[];
   setor: { akunId: string; nominal: number }[];
 }
 
@@ -19,10 +20,10 @@ export interface SetorPlan {
  * Baris setor lama yang akunnya sudah tidak punya data di-nol-kan, bukan dihapus. Tidak pernah ada setor ganda.
  */
 export function rencanaSetor(
-  periode: ParsedRow<"Periode">["data"],
-  saldoAwal: ParsedRow<"SaldoAwal">[],
-  transaksi: ParsedRow<"Transaksi">[],
-  tabungan: ParsedRow<"Tabungan">[],
+  periode: Row<"Periode">["data"],
+  saldoAwal: Row<"SaldoAwal">[],
+  transaksi: Row<"Transaksi">[],
+  tabungan: Row<"Tabungan">[],
   by: string,
   clock: Clock,
   teruskan?: Map<string, number>,
@@ -46,14 +47,13 @@ export function rencanaSetor(
       const d = first.data;
       if (d.nominal !== nominal || d.tanggal !== tanggal || d.keterangan !== keterangan || (d.diteruskan ?? 0) !== diteruskan) {
         plan.updates.push({
-          sheet: "Tabungan",
-          row: first.row,
-          values: updatedRow("Tabungan", d, { nominal, tanggal, keterangan, diteruskan }, by, clock),
+          tabel: "Tabungan",
+          baris: updatedRow("Tabungan", d, { nominal, tanggal, keterangan, diteruskan }, by, clock),
         });
       }
     } else {
       const id = newId("Tabungan", taken);
-      taken.push({ row: 0, data: { id } as ParsedRow<"Tabungan">["data"] });
+      taken.push({ data: { id } as Row<"Tabungan">["data"] });
       plan.appends.push(
         newRow(
           "Tabungan",
@@ -68,7 +68,7 @@ export function rencanaSetor(
 }
 
 /** Saldo tabungan pengguna: Σ setor (tutup periode) + Σ simpan (setor langsung) − Σ tarik. */
-export function totalTabungan(tabungan: ParsedRow<"Tabungan">[], userId: string): number {
+export function totalTabungan(tabungan: Row<"Tabungan">[], userId: string): number {
   let total = 0;
   for (const { data: t } of tabungan) {
     if (t.user_id !== userId) continue;
@@ -80,19 +80,19 @@ export function totalTabungan(tabungan: ParsedRow<"Tabungan">[], userId: string)
 
 /**
  * Hitung ulang setor untuk periode tertutup yang terdampak perubahan (spec §7.5).
- * Bisa 2 periode kalau transaksi pindah periode. `saldoAwal`/`transaksi` = isi sheet setelah perubahan.
+ * Bisa 2 periode kalau transaksi pindah periode. `saldoAwal`/`transaksi` = isi tabel setelah perubahan.
  */
 export function rencanaSetorTerdampak(
   periodeIds: string[],
-  periode: ParsedRow<"Periode">[],
-  saldoAwal: ParsedRow<"SaldoAwal">[],
-  transaksi: ParsedRow<"Transaksi">[],
-  tabungan: ParsedRow<"Tabungan">[],
+  periode: Row<"Periode">[],
+  saldoAwal: Row<"SaldoAwal">[],
+  transaksi: Row<"Transaksi">[],
+  tabungan: Row<"Tabungan">[],
   by: string,
   clock: Clock,
 ): Omit<SetorPlan, "setor"> {
   const updates: RowUpdate[] = [];
-  const appends: CellValue[][] = [];
+  const appends: Baris<"Tabungan">[] = [];
   for (const id of new Set(periodeIds)) {
     const p = periode.find((r) => r.data.id === id)?.data;
     if (!p?.tanggal_selesai) continue;
@@ -103,9 +103,18 @@ export function rencanaSetorTerdampak(
   return { updates, appends };
 }
 
-/** Tulis hasil rencana setor: update baris lama lalu append baris baru. */
-export async function simpanSetor(store: SheetStore, plan: Omit<SetorPlan, "setor">, extraUpdates: RowUpdate[] = []) {
-  const updates = [...extraUpdates, ...plan.updates];
-  if (updates.length) await store.updateRows(updates);
-  if (plan.appends.length) await store.append("Tabungan", plan.appends);
+/**
+ * Tulis hasil rencana setor dalam satu transaksi bersama `extra` (perubahan utama handler, mis. transaksi yang diedit).
+ * `extra` dijalankan lebih dulu.
+ */
+export async function simpanSetor(store: Store, plan: Omit<SetorPlan, "setor">, extra: Operasi[] = []) {
+  await store.batch([...extra, ...opsSetor(plan)]);
+}
+
+/** Operasi tulis dari rencana setor, untuk digabung ke `store.batch` lain. */
+export function opsSetor(plan: Omit<SetorPlan, "setor">): Operasi[] {
+  return [
+    ...plan.updates.map((u) => ({ jenis: "update", ...u }) as Operasi),
+    ...(plan.appends.length ? [{ jenis: "insert", tabel: "Tabungan", baris: plan.appends } as Operasi] : []),
+  ];
 }

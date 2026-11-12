@@ -1,16 +1,19 @@
 import { describe, it, expect } from "vitest";
 import { app, createApp } from "../server/app";
-import { storageError } from "../server/common/errors";
-import { MemorySheetStore } from "../server/sheets/memory-store";
-import { headerOf, SHEET_NAMES } from "../server/sheets/schema";
+import { createSql } from "../server/db/client";
+import { kolomOf, NAMA_TABEL, tabelDb } from "../server/db/schema";
+import { PostgresStore } from "../server/db/store";
+import { sqlTest } from "./helpers";
 
-function storeWith(override: Partial<Record<string, string[] | null>>) {
-  const grids: Record<string, string[][]> = {};
-  for (const s of SHEET_NAMES) {
-    const header = s in override ? override[s] : headerOf(s);
-    if (header) grids[s] = [header];
-  }
-  return new MemorySheetStore(grids);
+/** Store asli, tapi daftar kolom database bisa dimanipulasi. */
+function storeDenganKolom(ubah: (kolom: Record<string, string[]>) => void) {
+  const store = new PostgresStore(sqlTest);
+  store.kolomTabel = async () => {
+    const kolom = Object.fromEntries(NAMA_TABEL.map((t) => [tabelDb(t), [...kolomOf(t), "no"]]));
+    ubah(kolom);
+    return kolom;
+  };
+  return store;
 }
 
 describe("health", () => {
@@ -27,47 +30,39 @@ describe("health", () => {
     expect(await res.json()).toMatchObject({ status: 404, title: "Endpoint tidak ditemukan." });
   });
 
-  it("GET /api/health/sheets → 200 kalau semua header cocok", async () => {
-    const store = new MemorySheetStore();
-    const res = await createApp({ store: () => store }).request("/api/health/sheets");
+  it("GET /api/health/db → 200 kalau semua tabel & kolom ada (database lokal hasil migrasi)", async () => {
+    const store = new PostgresStore(sqlTest);
+    const res = await createApp({ store: () => store }).request("/api/health/db");
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.ok).toBe(true);
-    expect(body.sheets).toHaveLength(SHEET_NAMES.length);
+    expect(body.tabel).toHaveLength(NAMA_TABEL.length);
   });
 
-  it("T17 · header sheet salah urutan → 503", async () => {
-    const [a, b, ...rest] = headerOf("Akun");
-    const store = storeWith({ Akun: [b, a, ...rest] });
-    const res = await createApp({ store: () => store }).request("/api/health/sheets");
+  it("T17 · tabel hilang atau kolom kurang → 503", async () => {
+    const store = storeDenganKolom((k) => {
+      delete k.tabungan;
+      k.pengguna = k.pengguna.filter((c) => c !== "updated_at");
+    });
+    const res = await createApp({ store: () => store }).request("/api/health/db");
     expect(res.status).toBe(503);
     const body = await res.json();
     expect(body.ok).toBe(false);
-    const akun = body.sheets.find((s: { nama: string }) => s.nama === "Akun");
-    expect(akun.ok).toBe(false);
-    expect(akun.masalah).toContain('Kolom A harus "id", tetapi "nama".');
-    expect(body.sheets.find((s: { nama: string }) => s.nama === "Transaksi").ok).toBe(true);
+    const byName = Object.fromEntries(body.tabel.map((t: { nama: string }) => [t.nama, t]));
+    expect(byName.Tabungan.masalah).toEqual(["Tabel tabungan tidak ditemukan."]);
+    expect(byName.Pengguna.masalah).toEqual(['Kolom "updated_at" tidak ada.']);
+    expect(byName.Transaksi.ok).toBe(true);
   });
 
-  it("sheet hilang atau kolom kurang → 503", async () => {
-    const store = storeWith({ Tabungan: null, Pengguna: headerOf("Pengguna").slice(0, -1) });
-    const res = await createApp({ store: () => store }).request("/api/health/sheets");
-    expect(res.status).toBe(503);
-    const body = await res.json();
-    const byName = Object.fromEntries(body.sheets.map((s: { nama: string }) => [s.nama, s]));
-    expect(byName.Tabungan.masalah).toEqual(["Sheet tidak ditemukan."]);
-    expect(byName.Pengguna.masalah).toEqual(['Kolom N harus "updated_at", tetapi kosong.']);
-  });
-
-  it("Google gagal → 502 tanpa detail", async () => {
-    class BrokenStore extends MemorySheetStore {
-      override async readMany(): Promise<never> {
-        throw storageError();
-      }
-    }
-    const store = new BrokenStore();
-    const res = await createApp({ store: () => store }).request("/api/health/sheets");
+  it("database tidak bisa diakses → 502 tanpa detail", async () => {
+    // Port 1 di localhost: koneksi langsung ditolak
+    const mati = createSql("postgresql://postgres:salah@127.0.0.1:1/postgres");
+    const store = new PostgresStore(mati);
+    const res = await createApp({ store: () => store }).request("/api/health/db");
     expect(res.status).toBe(502);
-    expect(await res.json()).toMatchObject({ title: "Gagal mengakses penyimpanan data." });
+    const body = await res.json();
+    expect(body).toMatchObject({ title: "Gagal mengakses penyimpanan data." });
+    expect(JSON.stringify(body)).not.toContain("127.0.0.1");
+    await mati.end();
   });
 });

@@ -6,7 +6,7 @@ import { todayWib } from "../common/clock.js";
 import { AppError, validationError } from "../common/errors.js";
 import { formatRupiah } from "../common/format.js";
 import { jsonBody } from "../common/validation.js";
-import { findOwned, newId, newRow, rowsOf, type ParsedRow } from "../repositories/rows.js";
+import { findOwned, newId, newRow, rowsOf, type Row } from "../repositories/rows.js";
 import { pesanBelumDipilih, pilihanAkun } from "../services/akun-pengguna.js";
 import { addDays } from "../services/periode.js";
 import { ensureKategoriSistem } from "../services/pengguna.js";
@@ -15,7 +15,7 @@ import { transaksiMapper } from "../services/transaksi.js";
 
 const tanggalSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, { error: "Format tanggal harus yyyy-MM-dd." });
 
-type Tabungan = ParsedRow<"Tabungan">["data"];
+type Tabungan = Row<"Tabungan">["data"];
 
 export interface TabunganDto {
   id: string;
@@ -166,9 +166,10 @@ tabungan.post(
       berulang_id: "",
       label: "",
     };
-    const store = c.var.store();
-    await store.append("Tabungan", [newRow("Tabungan", tarik, uid, clock)]);
-    await store.append("Transaksi", [newRow("Transaksi", transaksi, uid, clock)]);
+    await c.var.store().batch([
+      { jenis: "insert", tabel: "Tabungan", baris: [newRow("Tabungan", tarik, uid, clock)] },
+      { jenis: "insert", tabel: "Transaksi", baris: [newRow("Transaksi", transaksi, uid, clock)] },
+    ]);
 
     const dto = transaksiMapper(akun, kategori)({ ...transaksi, created_by: uid, created_at: null, updated_by: "", updated_at: null });
     return c.json({ id: tarik.id, saldoTabunganAkun: saldo - body.nominal, transaksi: dto }, 201);
@@ -209,9 +210,9 @@ tabungan.post("/setor", jsonBody(gerakSchema), async (c) => {
   let kategori = rowsOf(data, "Kategori");
   let kat = kategori.find((k) => k.data.kode_sistem === "SETOR_TABUNGAN")?.data;
   if (!kat) {
-    // Spreadsheet lama: kategori sistem baru belum ada
+    // Data lama: kategori sistem baru belum ada
     await ensureKategoriSistem(store, data.Kategori, uid, clock);
-    kategori = rowsOf(await store.readMany(["Kategori"]), "Kategori");
+    kategori = rowsOf(await store.read(["Kategori"]), "Kategori");
     kat = kategori.find((k) => k.data.kode_sistem === "SETOR_TABUNGAN")?.data;
     if (!kat) throw new AppError(500, "Kategori Setor Tabungan tidak tersedia.");
   }
@@ -249,15 +250,16 @@ tabungan.post("/setor", jsonBody(gerakSchema), async (c) => {
     berulang_id: "",
     label: "",
   };
-  // Tabungan ditulis dulu: kalau transaksi gagal dibuat, baris simpan masih bisa dihapus lewat DELETE /tabungan/{id}
-  await store.append("Tabungan", [newRow("Tabungan", simpan, uid, clock)]);
-  await store.append("Transaksi", [newRow("Transaksi", transaksi, uid, clock)]);
+  await store.batch([
+    { jenis: "insert", tabel: "Tabungan", baris: [newRow("Tabungan", simpan, uid, clock)] },
+    { jenis: "insert", tabel: "Transaksi", baris: [newRow("Transaksi", transaksi, uid, clock)] },
+  ]);
 
   const dto = transaksiMapper(akun, kategori)({ ...transaksi, created_by: uid, created_at: null, updated_by: "", updated_at: null });
   return c.json({ id: simpan.id, saldoTabunganAkun: saldoTabungan + body.nominal, transaksi: dto }, 201);
 });
 
-/** Hapus tarik / setor langsung di periode aktif beserta transaksinya. Transaksi dihapus dulu supaya aman diulang. */
+/** Hapus tarik / setor langsung di periode aktif beserta transaksinya (satu transaksi database). */
 tabungan.delete("/:id", async (c) => {
   const { user, data } = await loadSession(c, ["Periode", "Transaksi", "Tabungan"]);
   const uid = user.data.id;
@@ -267,9 +269,7 @@ tabungan.delete("/:id", async (c) => {
     throw new AppError(409, "Hanya tarik atau setor langsung di periode aktif yang bisa dihapus.");
   }
 
-  const store = c.var.store();
   const trx = rowsOf(data, "Transaksi").find((r) => r.data.id === target.data.transaksi_id && r.data.user_id === uid);
-  if (trx) await store.deleteRow("Transaksi", trx.row);
-  await store.deleteRow("Tabungan", target.row);
+  await c.var.store().deleteRows([...(trx ? [{ tabel: "Transaksi" as const, id: trx.data.id }] : []), { tabel: "Tabungan", id: target.data.id }]);
   return c.body(null, 204);
 });

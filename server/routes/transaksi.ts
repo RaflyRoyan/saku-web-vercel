@@ -21,15 +21,15 @@ import {
   transaksiMapper,
   urutTransaksi,
 } from "../services/transaksi.js";
-import type { RowUpdate, SheetData } from "../sheets/store.js";
+import type { DataTabel, RowUpdate } from "../db/store.js";
 
-const SHEETS = ["Akun", "AkunPengguna", "Kategori", "KelompokKategori", "Periode", "SaldoAwal", "Transaksi", "Tabungan"] as const;
+const TABEL = ["Akun", "AkunPengguna", "Kategori", "KelompokKategori", "Periode", "SaldoAwal", "Transaksi", "Tabungan"] as const;
 /** POST/PUT juga butuh Anggaran untuk peringatan anggaran terlewati. */
-const SHEETS_TULIS = [...SHEETS, "Anggaran"] as const;
+const TABEL_TULIS = [...TABEL, "Anggaran"] as const;
 /** PUT/DELETE: transaksi milik split bill & tagihan QRIS dikunci. */
-const SHEETS_SPLIT = ["SplitBill", "SplitPeserta", "TagihanQris"] as const;
+const TABEL_SPLIT = ["SplitBill", "SplitPeserta", "TagihanQris"] as const;
 
-function parseAll(data: Record<(typeof SHEETS)[number], SheetData>) {
+function parseAll(data: DataTabel<(typeof TABEL)[number]>) {
   return {
     akun: rowsOf(data, "Akun"),
     akunPengguna: rowsOf(data, "AkunPengguna"),
@@ -48,7 +48,7 @@ transaksi.use(requireAuth);
 
 transaksi.get("/", async (c) => {
   const q = c.req.query();
-  const { user, data } = await loadSession(c, SHEETS);
+  const { user, data } = await loadSession(c, TABEL);
   const uid = user.data.id;
   const s = parseAll(data);
   const toDto = transaksiMapper(s.akun, s.kategori);
@@ -111,7 +111,7 @@ transaksi.get("/label/ringkasan", async (c) => {
   return c.json(ringkasanLabel(rowsOf(data, "Transaksi"), rowsOf(data, "Kategori"), user.data.id, label));
 });
 
-/** Beri/hapus label banyak transaksi sekaligus (satu batchUpdate). Transaksi split/tagihan/tarik tetap boleh: label tidak mengubah uang. */
+/** Beri/hapus label banyak transaksi sekaligus (satu transaksi database). Transaksi split/tagihan/tarik tetap boleh: label tidak mengubah uang. */
 transaksi.put(
   "/label",
   jsonBody(
@@ -130,7 +130,7 @@ transaksi.put(
     const target = [...new Set(body.ids)].map((id) => findOwned(rows, id, uid));
     const updates: RowUpdate[] = target
       .filter((r) => r.data.label !== label)
-      .map((r) => ({ sheet: "Transaksi", row: r.row, values: updatedRow("Transaksi", r.data, { label }, uid, c.var.clock) }));
+      .map((r) => ({ tabel: "Transaksi", baris: updatedRow("Transaksi", r.data, { label }, uid, c.var.clock) }));
     if (updates.length) await c.var.store().updateRows(updates);
     return c.json({ label: label || null, jumlah: target.length });
   },
@@ -144,7 +144,7 @@ transaksi.get("/:id", async (c) => {
 
 transaksi.post("/", jsonBody(transaksiBody), async (c) => {
   const body = c.req.valid("json");
-  const { user, data } = await loadSession(c, SHEETS_TULIS);
+  const { user, data } = await loadSession(c, TABEL_TULIS);
   const uid = user.data.id;
   const s = parseAll(data);
   const kolom = resolveTransaksi(body, s, uid, c.var.clock);
@@ -153,12 +153,10 @@ transaksi.post("/", jsonBody(transaksiBody), async (c) => {
 
   const baru = { id: newId("Transaksi", s.transaksi), user_id: uid, ...kolom, berulang_id: "", label };
   const full = { ...baru, created_by: uid, created_at: nowWibIso(c.var.clock), updated_by: "", updated_at: null };
-  const after = [...s.transaksi, { row: 0, data: full }];
+  const after = [...s.transaksi, { data: full }];
   const setor = rencanaSetorTerdampak([kolom.periode_id], s.periode, s.saldoAwal, after, s.tabungan, uid, c.var.clock);
 
-  const store = c.var.store();
-  await store.append("Transaksi", [newRow("Transaksi", baru, uid, c.var.clock)]);
-  await simpanSetor(store, setor);
+  await simpanSetor(c.var.store(), setor, [{ jenis: "insert", tabel: "Transaksi", baris: [newRow("Transaksi", baru, uid, c.var.clock)] }]);
 
   const dto = transaksiMapper(s.akun, s.kategori)(full);
   const peringatan = [...peringatanSaldo(full, s.saldoAwal, after, s.akun), ...peringatanAnggaran(full, rowsOf(data, "Anggaran"), s.kategori, s.kelompok, after)];
@@ -167,7 +165,7 @@ transaksi.post("/", jsonBody(transaksiBody), async (c) => {
 
 transaksi.put("/:id", jsonBody(transaksiBody), async (c) => {
   const body = c.req.valid("json");
-  const { user, data } = await loadSession(c, [...SHEETS_TULIS, ...SHEETS_SPLIT]);
+  const { user, data } = await loadSession(c, [...TABEL_TULIS, ...TABEL_SPLIT]);
   const uid = user.data.id;
   const s = parseAll(data);
   const target = findOwned(s.transaksi, c.req.param("id"), uid);
@@ -181,11 +179,11 @@ transaksi.put("/:id", jsonBody(transaksiBody), async (c) => {
 
   const values = updatedRow("Transaksi", target.data, { ...kolom, label }, uid, c.var.clock);
   const full = { ...target.data, ...kolom, label, updated_by: uid, updated_at: nowWibIso(c.var.clock) };
-  const after = s.transaksi.map((r) => (r.row === target.row ? { row: r.row, data: full } : r));
+  const after = s.transaksi.map((r) => (r.data.id === target.data.id ? { data: full } : r));
   // Tanggal berubah bisa memindahkan transaksi ke periode lain: hitung ulang keduanya
   const setor = rencanaSetorTerdampak([target.data.periode_id, kolom.periode_id], s.periode, s.saldoAwal, after, s.tabungan, uid, c.var.clock);
 
-  await simpanSetor(c.var.store(), setor, [{ sheet: "Transaksi", row: target.row, values }]);
+  await simpanSetor(c.var.store(), setor, [{ jenis: "update", tabel: "Transaksi", baris: values }]);
 
   const dto = transaksiMapper(s.akun, s.kategori)(full);
   const peringatan = [...peringatanSaldo(full, s.saldoAwal, after, s.akun), ...peringatanAnggaran(full, rowsOf(data, "Anggaran"), s.kategori, s.kelompok, after)];
@@ -193,7 +191,7 @@ transaksi.put("/:id", jsonBody(transaksiBody), async (c) => {
 });
 
 transaksi.delete("/:id", async (c) => {
-  const { user, data } = await loadSession(c, [...SHEETS, ...SHEETS_SPLIT]);
+  const { user, data } = await loadSession(c, [...TABEL, ...TABEL_SPLIT]);
   const uid = user.data.id;
   const s = parseAll(data);
   const target = findOwned(s.transaksi, c.req.param("id"), uid);
@@ -201,11 +199,9 @@ transaksi.delete("/:id", async (c) => {
   assertBukanSplit(target.data, rowsOf(data, "SplitBill"), rowsOf(data, "SplitPeserta"));
   assertBukanTagihanQris(target.data, rowsOf(data, "TagihanQris"));
 
-  const after = s.transaksi.filter((r) => r.row !== target.row);
+  const after = s.transaksi.filter((r) => r.data.id !== target.data.id);
   const setor = rencanaSetorTerdampak([target.data.periode_id], s.periode, s.saldoAwal, after, s.tabungan, uid, c.var.clock);
 
-  const store = c.var.store();
-  await store.deleteRow("Transaksi", target.row);
-  await simpanSetor(store, setor);
+  await simpanSetor(c.var.store(), setor, [{ jenis: "delete", tabel: "Transaksi", id: target.data.id }]);
   return c.body(null, 204);
 });

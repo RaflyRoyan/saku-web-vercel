@@ -1,7 +1,7 @@
-import type { ParsedRow } from "../repositories/rows.js";
+import type { Row } from "../repositories/rows.js";
 
 /** Periode aktif (tanggal_selesai kosong) milik pengguna. Maksimal satu. */
-export function periodeAktif(periode: ParsedRow<"Periode">[], userId: string): ParsedRow<"Periode"> | undefined {
+export function periodeAktif(periode: Row<"Periode">[], userId: string): Row<"Periode"> | undefined {
   return periode.find((p) => p.data.user_id === userId && !p.data.tanggal_selesai);
 }
 
@@ -12,8 +12,8 @@ export function periodeAktif(periode: ParsedRow<"Periode">[], userId: string): P
  */
 export function saldoPerAkun(
   periodeId: string,
-  saldoAwal: ParsedRow<"SaldoAwal">[],
-  transaksi: ParsedRow<"Transaksi">[],
+  saldoAwal: Row<"SaldoAwal">[],
+  transaksi: Row<"Transaksi">[],
 ): Map<string, number> {
   const saldo = new Map<string, number>();
   const add = (akunId: string, n: number) => {
@@ -39,9 +39,9 @@ export function saldoPerAkun(
 /** Saldo satu akun di periode aktif setiap pengguna yang punya periode aktif. */
 export function saldoAkunSemuaPengguna(
   akunId: string,
-  periode: ParsedRow<"Periode">[],
-  saldoAwal: ParsedRow<"SaldoAwal">[],
-  transaksi: ParsedRow<"Transaksi">[],
+  periode: Row<"Periode">[],
+  saldoAwal: Row<"SaldoAwal">[],
+  transaksi: Row<"Transaksi">[],
 ): { userId: string; saldo: number }[] {
   return periode
     .filter((p) => !p.data.tanggal_selesai)

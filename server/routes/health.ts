@@ -1,11 +1,10 @@
 import { Hono } from "hono";
 import type { AppEnv } from "../app.js";
 import { problem } from "../common/errors.js";
-import { SHEET_NAMES, validateHeader, type SheetName } from "../sheets/schema.js";
-import { SheetMissingError, type SheetData } from "../sheets/store.js";
+import { kolomOf, NAMA_TABEL, tabelDb, type NamaTabel } from "../db/schema.js";
 
-interface StatusSheet {
-  nama: SheetName;
+interface StatusTabel {
+  nama: NamaTabel;
   ok: boolean;
   masalah?: string[];
 }
@@ -14,31 +13,27 @@ export const health = new Hono<AppEnv>();
 
 health.get("/", (c) => c.json({ status: "ok", waktu: c.var.clock.now().toISOString() }));
 
-// Hanya nama sheet dan status kolom; isi data tidak pernah dikirim.
-health.get("/sheets", async (c) => {
-  const store = c.var.store();
-  let data: Partial<Record<SheetName, SheetData>>;
-  let missing: SheetName[] = [];
-  try {
-    data = await store.readMany(SHEET_NAMES);
-  } catch (err) {
-    if (!(err instanceof SheetMissingError)) throw err;
-    missing = err.sheets;
-    const ada = SHEET_NAMES.filter((s) => !missing.includes(s));
-    data = ada.length ? await store.readMany(ada) : {};
-  }
+/** Bandingkan kolom tabel di database dengan schema. Kosong = cocok. Kolom tambahan (mis. `no`) diabaikan. */
+export function periksaTabel(nama: NamaTabel, kolomDb: readonly string[] | undefined): string[] {
+  if (!kolomDb) return [`Tabel ${tabelDb(nama)} tidak ditemukan.`];
+  const ada = new Set(kolomDb);
+  return kolomOf(nama)
+    .filter((k) => !ada.has(k))
+    .map((k) => `Kolom "${k}" tidak ada.`);
+}
 
-  const sheets: StatusSheet[] = SHEET_NAMES.map((nama) => {
-    const sheet = data[nama];
-    if (!sheet) return { nama, ok: false, masalah: ["Sheet tidak ditemukan."] };
-    const masalah = validateHeader(nama, sheet.header);
+// Hanya nama tabel dan status kolom; isi data tidak pernah dikirim.
+health.get("/db", async (c) => {
+  const kolom = await c.var.store().kolomTabel();
+  const tabel: StatusTabel[] = NAMA_TABEL.map((nama) => {
+    const masalah = periksaTabel(nama, kolom[tabelDb(nama)]);
     return masalah.length ? { nama, ok: false, masalah } : { nama, ok: true };
   });
 
-  if (sheets.every((s) => s.ok)) return c.json({ ok: true, sheets });
+  if (tabel.every((t) => t.ok)) return c.json({ ok: true, tabel });
   console.error(
-    "Header sheet tidak cocok:",
-    sheets.filter((s) => !s.ok).map((s) => `${s.nama}: ${s.masalah?.join(" ")}`).join(" | "),
+    "Struktur tabel tidak cocok:",
+    tabel.filter((t) => !t.ok).map((t) => `${t.nama}: ${t.masalah?.join(" ")}`).join(" | "),
   );
-  return problem(c, 503, "Struktur spreadsheet tidak sesuai.", { ok: false, sheets });
+  return problem(c, 503, "Struktur database tidak sesuai. Jalankan migrasi terbaru.", { ok: false, tabel });
 });

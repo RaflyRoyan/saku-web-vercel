@@ -1,5 +1,5 @@
-// Urutan kolom per sheet = urutan kolom A, B, C, … (spec §5.2 + penyesuaian 02 §2).
-// API membaca & menulis berdasarkan urutan ini, bukan nama header.
+// Kolom per tabel Postgres (spec §5.2 + penyesuaian 02 §2). Nama tabel = nama di sini dalam snake_case
+// (mis. `AkunPengguna` → `akun_pengguna`), nama kolom sama persis. Migrasi SQL ada di supabase/migrations.
 
 export type TipeKolom = "teks" | "angka" | "boolean" | "tanggal" | "bulan" | "datetime";
 
@@ -207,9 +207,23 @@ export const SCHEMA = {
   ],
 } as const satisfies Record<string, readonly Kolom[]>;
 
-export type SheetName = keyof typeof SCHEMA;
+export type NamaTabel = keyof typeof SCHEMA;
 
-export const SHEET_NAMES = Object.keys(SCHEMA) as SheetName[];
+export const NAMA_TABEL = Object.keys(SCHEMA) as NamaTabel[];
+
+/** Nama tabel di Postgres, mis. `AkunPengguna` → `akun_pengguna`. */
+export function tabelDb(nama: NamaTabel): string {
+  return nama.replace(/([a-z])([A-Z])/g, "$1_$2").toLowerCase();
+}
+
+/** Tabel data per pengguna (punya kolom `user_id`). Master bersama & `Pengguna` tidak. */
+export function punyaUserId(nama: NamaTabel): boolean {
+  return SCHEMA[nama].some(([kolom]) => kolom === "user_id");
+}
+
+export function kolomOf(nama: NamaTabel): string[] {
+  return SCHEMA[nama].map(([kolom]) => kolom);
+}
 
 export const ID_PREFIX = {
   Pengguna: "US",
@@ -229,7 +243,7 @@ export const ID_PREFIX = {
   SplitPeserta: "SP",
   Pengaturan: "PG",
   TagihanQris: "TQ",
-} as const satisfies Partial<Record<SheetName, string>>;
+} as const satisfies Partial<Record<NamaTabel, string>>;
 
 interface TipeTs {
   teks: string;
@@ -240,48 +254,9 @@ interface TipeTs {
   datetime: string | null; // ISO 8601 offset +07:00
 }
 
-type KolomSheet<S extends SheetName> = (typeof SCHEMA)[S][number];
+type KolomTabel<S extends NamaTabel> = (typeof SCHEMA)[S][number];
 
-/** Satu baris sheet yang sudah di-parse, key = nama kolom. */
-export type Baris<S extends SheetName> = {
-  [K in KolomSheet<S> as K[0]]: TipeTs[K[1]];
+/** Satu baris tabel, key = nama kolom. Teks kosong = "", bukan null. */
+export type Baris<S extends NamaTabel> = {
+  [K in KolomTabel<S> as K[0]]: TipeTs[K[1]];
 };
-
-export function headerOf(sheet: SheetName): string[] {
-  return SCHEMA[sheet].map(([nama]) => nama);
-}
-
-/** Huruf kolom A, B, …, Z, AA, … dari indeks 0-based. */
-export function columnLetter(index: number): string {
-  let n = index + 1;
-  let s = "";
-  while (n > 0) {
-    const r = (n - 1) % 26;
-    s = String.fromCharCode(65 + r) + s;
-    n = Math.floor((n - 1) / 26);
-  }
-  return s;
-}
-
-export function lastColumn(sheet: SheetName): string {
-  return columnLetter(SCHEMA[sheet].length - 1);
-}
-
-/** Bandingkan header baris 1 dengan schema. Kosong = cocok. */
-export function validateHeader(sheet: SheetName, header: readonly string[]): string[] {
-  const expected = headerOf(sheet);
-  const actual = header.map((h) => h.trim());
-  const masalah: string[] = [];
-  const total = Math.max(expected.length, actual.length);
-  for (let i = 0; i < total; i++) {
-    const exp = expected[i];
-    const act = actual[i] ?? "";
-    const col = columnLetter(i);
-    if (exp === undefined) {
-      if (act !== "") masalah.push(`Kolom ${col} tidak dikenal: "${act}".`);
-    } else if (act !== exp) {
-      masalah.push(act === "" ? `Kolom ${col} harus "${exp}", tetapi kosong.` : `Kolom ${col} harus "${exp}", tetapi "${act}".`);
-    }
-  }
-  return masalah;
-}

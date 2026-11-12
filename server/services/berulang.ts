@@ -1,6 +1,6 @@
-import type { ParsedRow } from "../repositories/rows.js";
+import type { Row } from "../repositories/rows.js";
 
-type B = ParsedRow<"Berulang">["data"];
+type B = Row<"Berulang">["data"];
 
 export type StatusBulan = "belum" | "dibayar" | "dilewati";
 export type StatusPengingat = "akan_datang" | "hari_ini" | "terlambat";
@@ -32,19 +32,19 @@ export function berlaku(b: B, bulan: string): boolean {
 }
 
 /** Transaksi pembayaran langganan ini yang tanggalnya di bulan B. */
-export function pembayaran(b: B, bulan: string, transaksi: ParsedRow<"Transaksi">[]) {
+export function pembayaran(b: B, bulan: string, transaksi: Row<"Transaksi">[]) {
   return transaksi.find((t) => t.data.berulang_id === b.id && t.data.user_id === b.user_id && (t.data.tanggal ?? "").startsWith(bulan));
 }
 
-export function dilewati(b: B, bulan: string, lewati: ParsedRow<"BerulangLewati">[]) {
+export function dilewati(b: B, bulan: string, lewati: Row<"BerulangLewati">[]) {
   return lewati.find((l) => l.data.berulang_id === b.id && l.data.user_id === b.user_id && l.data.bulan === bulan);
 }
 
 export function statusBulan(
   b: B,
   bulan: string,
-  transaksi: ParsedRow<"Transaksi">[],
-  lewati: ParsedRow<"BerulangLewati">[],
+  transaksi: Row<"Transaksi">[],
+  lewati: Row<"BerulangLewati">[],
 ): { status: StatusBulan; transaksiId: string | null } {
   const bayar = pembayaran(b, bulan, transaksi);
   if (bayar) return { status: "dibayar", transaksiId: bayar.data.id };
@@ -65,9 +65,9 @@ export interface Pengingat {
  * `terlambat` hanya untuk bulan berjalan; bulan sebelumnya tidak ditampilkan.
  */
 export function hitungPengingat(
-  berulang: ParsedRow<"Berulang">[],
-  transaksi: ParsedRow<"Transaksi">[],
-  lewati: ParsedRow<"BerulangLewati">[],
+  berulang: Row<"Berulang">[],
+  transaksi: Row<"Transaksi">[],
+  lewati: Row<"BerulangLewati">[],
   userId: string,
   hari: string,
 ): Pengingat[] {

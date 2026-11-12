@@ -35,7 +35,7 @@ const dummyHash = (iterations: number) => {
 export const auth = new Hono<AppEnv>();
 
 auth.get("/status", async (c) => {
-  const { Pengguna } = await c.var.store().readMany(["Pengguna"]);
+  const { Pengguna } = await c.var.store().read(["Pengguna"]);
   return c.json({ perluSetup: rowsOf({ Pengguna }, "Pengguna").length === 0 });
 });
 
@@ -45,7 +45,7 @@ auth.post(
   async (c) => {
     const body = c.req.valid("json");
     const store = c.var.store();
-    const data = await store.readMany(["Pengguna", "Kategori", "KelompokKategori"]);
+    const data = await store.read(["Pengguna", "Kategori", "KelompokKategori"]);
     const existing = rowsOf(data, "Pengguna");
     if (existing.length) throw new AppError(409, "Setup awal sudah dilakukan.");
 
@@ -69,7 +69,7 @@ auth.post(
     const store = c.var.store();
     const clock = c.var.clock;
     const now = clock.now().getTime();
-    const { Pengguna } = await store.readMany(["Pengguna"]);
+    const { Pengguna } = await store.read(["Pengguna"]);
     const found = findByUsername(rowsOf({ Pengguna }, "Pengguna"), username);
 
     if (!found) {
@@ -90,7 +90,6 @@ auth.post(
       const kunci = gagal >= MAX_GAGAL;
       await store.updateRow(
         "Pengguna",
-        found.row,
         updatedRow(
           "Pengguna",
           u,
@@ -103,7 +102,7 @@ auth.post(
     }
 
     const changes = { last_login: nowWibIso(clock), gagal_login: 0, terkunci_sampai: null };
-    await store.updateRow("Pengguna", found.row, updatedRow("Pengguna", u, changes, u.id, clock));
+    await store.updateRow("Pengguna", updatedRow("Pengguna", u, changes, u.id, clock));
     const expiresAt = await issueToken(c, u);
     return c.json({ pengguna: toDto({ ...u, ...changes }), expiresAt });
   },
@@ -136,7 +135,7 @@ auth.put(
       password_hash: await hashPassword(passwordBaru, c.var.settings().passwordIterations),
       versi_token: (user.data.versi_token ?? 1) + 1,
     };
-    await c.var.store().updateRow("Pengguna", user.row, updatedRow("Pengguna", user.data, changes, user.data.id, c.var.clock));
+    await c.var.store().updateRow("Pengguna", updatedRow("Pengguna", user.data, changes, user.data.id, c.var.clock));
     const expiresAt = await issueToken(c, { ...user.data, ...changes });
     return c.json({ expiresAt });
   },
@@ -145,7 +144,7 @@ auth.put(
 auth.put("/profil", jsonBody(z.object({ nama: namaSchema })), async (c) => {
   const { nama } = c.req.valid("json");
   const { user } = await loadSession(c);
-  await c.var.store().updateRow("Pengguna", user.row, updatedRow("Pengguna", user.data, { nama }, user.data.id, c.var.clock));
+  await c.var.store().updateRow("Pengguna", updatedRow("Pengguna", user.data, { nama }, user.data.id, c.var.clock));
   return c.json(toDto({ ...user.data, nama }));
 });
 

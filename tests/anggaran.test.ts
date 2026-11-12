@@ -61,7 +61,7 @@ describe("anggaran per periode", () => {
     const r = (await budi.get(`/periode/${periode}/anggaran`)).body;
     expect(r.kelompok).toHaveLength(1);
     expect(r.kelompok[0]).toMatchObject({ anggaran: 700_000, anggaranSendiri: null });
-    const rows = (await store.readMany(["Anggaran"])).Anggaran.rows;
+    const rows = (await store.read(["Anggaran"])).Anggaran;
     expect(rows).toHaveLength(1);
 
     await budi.put(`/periode/${periode}/anggaran`, { items: [] });

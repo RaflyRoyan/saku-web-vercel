@@ -1,8 +1,8 @@
 import { z } from "zod";
 import { AppError, validationError, type FieldErrors } from "../common/errors.js";
-import type { ParsedRow } from "../repositories/rows.js";
+import type { Row } from "../repositories/rows.js";
 
-type T = ParsedRow<"Transaksi">["data"];
+type T = Row<"Transaksi">["data"];
 
 const MAKS = 1_000_000_000_000;
 const rupiah = (label: string, min: 0 | 1) =>
@@ -104,7 +104,7 @@ export function cekSplit(body: SplitBody): void {
 }
 
 /** Transaksi yang dibuat split bill hanya bisa diubah lewat split bill. */
-export function assertBukanSplit(t: T, bill: ParsedRow<"SplitBill">[], peserta: ParsedRow<"SplitPeserta">[]) {
+export function assertBukanSplit(t: T, bill: Row<"SplitBill">[], peserta: Row<"SplitPeserta">[]) {
   const splitId = bill.find((b) => b.data.transaksi_id === t.id)?.data.id ?? peserta.find((p) => p.data.transaksi_id === t.id)?.data.split_id;
   if (!splitId) return;
   const nama = bill.find((b) => b.data.id === splitId)?.data.nama ?? "";

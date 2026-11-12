@@ -4,9 +4,9 @@ import type { AppEnv } from "../app.js";
 import { loadSession, requireAdmin, requireAuth } from "../auth/session.js";
 import { AppError } from "../common/errors.js";
 import { jsonBody } from "../common/validation.js";
-import { newId, newRow, notFound, rowsOf, updatedRow, type ParsedRow } from "../repositories/rows.js";
+import { newId, newRow, notFound, rowsOf, updatedRow, type Row } from "../repositories/rows.js";
 import { ensureKelompokBawaan, kelompokIdDari, LAINNYA, urutKelompok } from "../services/kelompok.js";
-import type { RowUpdate } from "../sheets/store.js";
+import type { RowUpdate } from "../db/store.js";
 
 // Kelompok kategori pengeluaran (UI: "Kategori"). Master bersama, hanya admin yang menulis.
 
@@ -26,14 +26,14 @@ export interface KelompokDto {
 }
 
 /** Nama unik (case-insensitive) di antara kelompok aktif; "Lainnya" selalu terpakai. */
-function assertNamaFree(rows: ParsedRow<"KelompokKategori">[], nama: string, exceptId?: string) {
+function assertNamaFree(rows: Row<"KelompokKategori">[], nama: string, exceptId?: string) {
   const n = nama.toLowerCase();
   if (n === LAINNYA.nama.toLowerCase() || rows.some((r) => r.data.aktif && r.data.id !== exceptId && r.data.nama.toLowerCase() === n)) {
     throw new AppError(409, "Nama kategori sudah dipakai.", { nama: ["Nama kategori sudah dipakai."] });
   }
 }
 
-function findKelompok(rows: ParsedRow<"KelompokKategori">[], id: string) {
+function findKelompok(rows: Row<"KelompokKategori">[], id: string) {
   const found = rows.find((r) => r.data.id === id);
   if (!found) throw notFound();
   return found;
@@ -92,7 +92,7 @@ kelompokKategori.put(
     urut.forEach((id, i) => {
       const r = findKelompok(rows, id);
       if (r.data.urutan !== i + 1) {
-        updates.push({ sheet: "KelompokKategori", row: r.row, values: updatedRow("KelompokKategori", r.data, { urutan: i + 1 }, user.data.id, c.var.clock) });
+        updates.push({ tabel: "KelompokKategori", baris: updatedRow("KelompokKategori", r.data, { urutan: i + 1 }, user.data.id, c.var.clock) });
       }
     });
     await c.var.store().updateRows(updates);
@@ -108,7 +108,7 @@ kelompokKategori.put("/:id", jsonBody(z.object({ nama: namaSchema })), async (c)
   const target = findKelompok(rows, c.req.param("id"));
   if (target.data.aktif) assertNamaFree(rows, nama, target.data.id);
 
-  await c.var.store().updateRow("KelompokKategori", target.row, updatedRow("KelompokKategori", target.data, { nama }, user.data.id, c.var.clock));
+  await c.var.store().updateRow("KelompokKategori", updatedRow("KelompokKategori", target.data, { nama }, user.data.id, c.var.clock));
   return c.json({ id: target.data.id, nama, urutan: target.data.urutan ?? 0, aktif: target.data.aktif, sistem: false } satisfies KelompokDto);
 });
 
@@ -128,7 +128,7 @@ kelompokKategori.put("/:id/aktif", jsonBody(z.object({ aktif: z.boolean({ error:
   }
 
   if (target.data.aktif !== aktif) {
-    await c.var.store().updateRow("KelompokKategori", target.row, updatedRow("KelompokKategori", target.data, { aktif }, user.data.id, c.var.clock));
+    await c.var.store().updateRow("KelompokKategori", updatedRow("KelompokKategori", target.data, { aktif }, user.data.id, c.var.clock));
   }
   return c.body(null, 204);
 });

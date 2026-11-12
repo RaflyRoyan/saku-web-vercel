@@ -53,7 +53,7 @@ describe("akun pilihan pengguna", () => {
     await budi.put("/akun/pilihan", { ids: [akun.GoPay, akun.BCA] });
     await budi.put("/akun/pilihan", { ids: [akun.GoPay, akun.BCA] });
 
-    const rows = (await store.readMany(["AkunPengguna"])).AkunPengguna.rows;
+    const rows = (await store.read(["AkunPengguna"])).AkunPengguna;
     expect(rows).toHaveLength(2);
     expect(namaAkun((await budi.get("/akun")).body)).toEqual(["GoPay", "BCA"]);
 

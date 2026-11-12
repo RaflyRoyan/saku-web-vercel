@@ -1,7 +1,7 @@
 import { z } from "zod";
-import type { ParsedRow } from "../repositories/rows.js";
+import type { Row } from "../repositories/rows.js";
 
-type T = ParsedRow<"Transaksi">["data"];
+type T = Row<"Transaksi">["data"];
 
 export const MAKS_LABEL = 50;
 
@@ -39,7 +39,7 @@ export function daftarLabel(transaksi: readonly { data: T }[], uid: string): { l
 }
 
 /** Total masuk/keluar satu label (lintas periode, transfer tidak dihitung) + rincian keluar per kategori. */
-export function ringkasanLabel(transaksi: readonly { data: T }[], kategori: readonly ParsedRow<"Kategori">[], uid: string, label: string) {
+export function ringkasanLabel(transaksi: readonly { data: T }[], kategori: readonly Row<"Kategori">[], uid: string, label: string) {
   const list = transaksi.map((r) => r.data).filter((t) => t.user_id === uid && t.label && samaLabel(t.label, label));
   const nama = new Map(kategori.map((k) => [k.data.id, k.data.nama]));
   const perKategori = new Map<string, number>();

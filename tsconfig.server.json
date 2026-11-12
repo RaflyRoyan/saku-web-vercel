@@ -15,5 +15,5 @@
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["server", "api", "tests"]
+  "include": ["server", "api", "tests", "scripts/sheets-lama", "scripts/migrasi_ke_supabase.ts"]
 }

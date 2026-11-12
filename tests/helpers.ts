@@ -1,10 +1,21 @@
 import { createApp } from "../server/app";
 import { FakeClock } from "../server/common/clock";
-import { MemorySheetStore } from "../server/sheets/memory-store";
+import { createSql } from "../server/db/client";
+import { NAMA_TABEL, SCHEMA, tabelDb, type Baris, type NamaTabel } from "../server/db/schema";
+import { PostgresStore, type Row, type Store } from "../server/db/store";
 
-/** App + memory store + clock palsu, dengan client yang menyimpan cookie seperti browser. */
+/** Postgres lokal dari `npx supabase start`. Semua file test memakai database yang sama (fileParallelism: false). */
+export const DATABASE_URL_TEST = process.env.DATABASE_URL_TEST ?? "postgresql://postgres:postgres@127.0.0.1:54322/postgres";
+export const sqlTest = createSql(DATABASE_URL_TEST);
+
+/** Kosongkan semua tabel aplikasi. Dipanggil sebelum tiap test (tests/setup-db.ts). */
+export async function kosongkanDb() {
+  await sqlTest.unsafe(`truncate ${NAMA_TABEL.map(tabelDb).join(", ")} restart identity cascade`);
+}
+
+/** App + Postgres lokal + clock palsu, dengan client yang menyimpan cookie seperti browser. */
 export function setupTest(start = "2026-10-30T03:00:00Z") {
-  const store = new MemorySheetStore();
+  const store = new PostgresStore(sqlTest);
   const clock = new FakeClock(start);
   const app = createApp({
     store: () => store,
@@ -56,6 +67,8 @@ export const BUDI = { username: "budi", password: "budi12345", nama: "Budi", per
 
 /** Admin + Budi, 4 akun, kategori Makan & Gaji. Clock: 30 Okt 2026 10.00 WIB. */
 export async function siapkan() {
+  // Beberapa test memanggil siapkan() dua kali; masing-masing mulai dari database kosong
+  await kosongkanDb();
   const t = setupTest();
   const admin = t.client();
   await admin.post("/auth/setup", ADMIN);
@@ -75,3 +88,22 @@ export async function siapkan() {
   return { ...t, admin, budi, akun, makan, gaji, biayaAdmin, tarik };
 }
 
+
+/** Baris dari nilai mentah berurutan kolom schema; kolom yang tidak diisi = kosong. */
+export function barisDari<S extends NamaTabel>(tabel: S, values: unknown[]): Baris<S> {
+  const obj: Record<string, unknown> = {};
+  SCHEMA[tabel].forEach(([nama, tipe], i) => {
+    const v = values[i];
+    obj[nama] = v === undefined || v === "" ? (tipe === "teks" ? "" : tipe === "boolean" ? false : null) : v;
+  });
+  return obj as Baris<S>;
+}
+
+export function rowsDari<S extends NamaTabel>(tabel: S, rows: unknown[][]): Row<S>[] {
+  return rows.map((values) => ({ data: barisDari(tabel, values) }));
+}
+
+/** Tulis baris mentah (nilai urut kolom schema) langsung ke database, untuk menyiapkan data test. */
+export async function appendRaw<S extends NamaTabel>(store: Store, tabel: S, rows: unknown[][]) {
+  await store.append(tabel, rows.map((values) => barisDari(tabel, values)));
+}

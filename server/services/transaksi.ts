@@ -2,7 +2,7 @@ import { z } from "zod";
 import { todayWib, type Clock } from "../common/clock.js";
 import { AppError, validationError, type FieldErrors } from "../common/errors.js";
 import { formatRupiah } from "../common/format.js";
-import type { ParsedRow } from "../repositories/rows.js";
+import type { Row } from "../repositories/rows.js";
 import { pesanBelumDipilih, pilihanAkun } from "./akun-pengguna.js";
 import { addDays, periodeUntukTanggal } from "./periode.js";
 import { labelSchema } from "./label.js";
@@ -34,7 +34,7 @@ export const transaksiBody = z.object({
 });
 
 export type TransaksiBody = z.infer<typeof transaksiBody>;
-type T = ParsedRow<"Transaksi">["data"];
+type T = Row<"Transaksi">["data"];
 
 export interface TransaksiDto {
   id: string;
@@ -57,7 +57,7 @@ export interface TransaksiDto {
 }
 
 /** DTO dengan nama akun/kategori (denormalisasi untuk tampilan, spec §10.6). */
-export function transaksiMapper(akun: ParsedRow<"Akun">[], kategori: ParsedRow<"Kategori">[]) {
+export function transaksiMapper(akun: Row<"Akun">[], kategori: Row<"Kategori">[]) {
   const namaAkun = new Map(akun.map((a) => [a.data.id, a.data.nama]));
   const kat = new Map(kategori.map((k) => [k.data.id, k.data]));
   return (t: T): TransaksiDto => ({
@@ -87,15 +87,15 @@ export function urutTransaksi(a: T, b: T): number {
 }
 
 /** Transaksi milik menu Tabungan (tarik / setor langsung): hanya bisa diubah lewat menu Tabungan. */
-export function isTransaksiTabungan(t: T, kategori: ParsedRow<"Kategori">[]): boolean {
+export function isTransaksiTabungan(t: T, kategori: Row<"Kategori">[]): boolean {
   return kategori.some((k) => k.data.id === t.kategori_id && (k.data.kode_sistem === "TARIK_TABUNGAN" || k.data.kode_sistem === "SETOR_TABUNGAN"));
 }
 
-export interface SheetsTransaksi {
-  akun: ParsedRow<"Akun">[];
-  akunPengguna: ParsedRow<"AkunPengguna">[];
-  kategori: ParsedRow<"Kategori">[];
-  periode: ParsedRow<"Periode">[];
+export interface DataTransaksi {
+  akun: Row<"Akun">[];
+  akunPengguna: Row<"AkunPengguna">[];
+  kategori: Row<"Kategori">[];
+  periode: Row<"Periode">[];
 }
 
 /**
@@ -104,7 +104,7 @@ export interface SheetsTransaksi {
  */
 export function resolveTransaksi(
   body: TransaksiBody,
-  sheets: SheetsTransaksi,
+  data: DataTransaksi,
   userId: string,
   clock: Clock,
   current?: T,
@@ -114,9 +114,9 @@ export function resolveTransaksi(
   const today = todayWib(clock);
   const tanggal = body.tanggal ?? today;
 
-  const pilihan = pilihanAkun(sheets.akunPengguna, userId);
+  const pilihan = pilihanAkun(data.akunPengguna, userId);
   const cekAkun = (field: "akunId" | "akunTujuanId", id: string, lama?: string) => {
-    const a = sheets.akun.find((r) => r.data.id === id)?.data;
+    const a = data.akun.find((r) => r.data.id === id)?.data;
     if (!a) err(field, "Akun tidak ditemukan.");
     else if (id === lama) return;
     else if (!a.aktif) err(field, `Akun ${a.nama} nonaktif dan tidak bisa dipakai.`);
@@ -136,7 +136,7 @@ export function resolveTransaksi(
     biayaAdmin = body.biayaAdmin ?? 0;
   } else {
     kategoriId = body.kategoriId ?? "";
-    const k = sheets.kategori.find((r) => r.data.id === kategoriId)?.data;
+    const k = data.kategori.find((r) => r.data.id === kategoriId)?.data;
     if (!kategoriId) err("kategoriId", "Kategori wajib dipilih.");
     else if (!k) err("kategoriId", "Kategori tidak ditemukan.");
     else if (k.tipe !== body.tipe) err("kategoriId", `Kategori ${k.nama} bukan kategori ${body.tipe === "masuk" ? "pemasukan" : "pengeluaran"}.`);
@@ -151,7 +151,7 @@ export function resolveTransaksi(
 
   // Edit tanpa ganti tanggal: tetap di periodenya. Transaksi yang dibiarkan di periode lama saat mulai periode baru
   // (tanggal ≥ awal periode baru) tidak ikut pindah hanya karena nominal/kategori diedit.
-  const periodeId = current && current.tanggal === tanggal && current.periode_id ? current.periode_id : periodeUntukTanggal(sheets.periode, userId, tanggal).data.id;
+  const periodeId = current && current.tanggal === tanggal && current.periode_id ? current.periode_id : periodeUntukTanggal(data.periode, userId, tanggal).data.id;
   return {
     periode_id: periodeId,
     tanggal,
@@ -168,9 +168,9 @@ export function resolveTransaksi(
 /** Peringatan saldo minus untuk akun yang dikurangi transaksi ini (spec §7.3). Tidak memblokir. */
 export function peringatanSaldo(
   t: T,
-  saldoAwal: ParsedRow<"SaldoAwal">[],
-  transaksi: ParsedRow<"Transaksi">[],
-  akun: ParsedRow<"Akun">[],
+  saldoAwal: Row<"SaldoAwal">[],
+  transaksi: Row<"Transaksi">[],
+  akun: Row<"Akun">[],
 ): string[] {
   if (t.tipe === "masuk") return [];
   const saldo = saldoPerAkun(t.periode_id, saldoAwal, transaksi).get(t.akun_id) ?? 0;
@@ -179,6 +179,6 @@ export function peringatanSaldo(
   return [`Saldo ${nama} menjadi minus ${formatRupiah(-saldo)}`];
 }
 
-export function assertBukanTabungan(t: T, kategori: ParsedRow<"Kategori">[]) {
+export function assertBukanTabungan(t: T, kategori: Row<"Kategori">[]) {
   if (isTransaksiTabungan(t, kategori)) throw new AppError(409, "Ubah lewat menu Tabungan.");
 }

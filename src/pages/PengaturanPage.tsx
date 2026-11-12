@@ -238,16 +238,16 @@ function AkunSaya() {
   return <AkunSayaForm key={q.data.akun.map((a) => `${a.id}:${a.dipilih}`).join()} data={q.data} />;
 }
 
-function StatusSheets() {
+function StatusDatabase() {
   const q = useQuery({
-    queryKey: ["health", "sheets"],
-    queryFn: () => api<{ ok: boolean }>("/health/sheets"),
+    queryKey: ["health", "db"],
+    queryFn: () => api<{ ok: boolean }>("/health/db"),
     retry: false,
   });
   if (q.isPending) return <Skeleton className="h-5 w-48" />;
   return q.isSuccess ? (
     <p className="flex items-center gap-2 text-sm text-masuk">
-      <CircleCheck className="size-4" aria-hidden /> Terhubung ke Google Sheets
+      <CircleCheck className="size-4" aria-hidden /> Terhubung ke database
     </p>
   ) : (
     <p className="flex items-center gap-2 text-sm text-keluar">
@@ -277,7 +277,7 @@ export default function PengaturanPage() {
         </Section>
         <Section title="Info">
           <p className="text-sm text-stone-700">Saku v{__APP_VERSION__}</p>
-          <StatusSheets />
+          <StatusDatabase />
         </Section>
         <Button variant="danger" onClick={() => logout.mutate()} loading={logout.isPending} className="self-start">
           <LogOut className="size-5" aria-hidden />

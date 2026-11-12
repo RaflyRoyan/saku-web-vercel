@@ -38,12 +38,12 @@ pengaturan.put(
     const store = c.var.store();
 
     if (payload === null) {
-      if (row) await store.deleteRow("Pengaturan", row.row);
+      if (row) await store.deleteRow("Pengaturan", row.data.id);
       return c.json(null);
     }
     const q = parseQris(payload);
     if (!q.ok) throw validationError({ payload: [q.pesan] });
-    if (row) await store.updateRow("Pengaturan", row.row, updatedRow("Pengaturan", row.data, { nilai: q.payload }, uid, c.var.clock));
+    if (row) await store.updateRow("Pengaturan", updatedRow("Pengaturan", row.data, { nilai: q.payload }, uid, c.var.clock));
     else await store.append("Pengaturan", [newRow("Pengaturan", { id: newId("Pengaturan", rows), user_id: uid, kunci: KUNCI_QRIS, nilai: q.payload }, uid, c.var.clock)]);
     return c.json(qrisDto(q.payload));
   },

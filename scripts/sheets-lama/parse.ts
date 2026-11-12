@@ -1,7 +1,7 @@
 // Parser toleran untuk nilai dari Sheets (spec §5.1 butir 5–6) dan serializer untuk menulis.
 // Nilai bisa diketik manual di spreadsheet, jadi format masukan dibuat longgar.
 
-import { toWibDate, toWibIso } from "../common/clock.js";
+import { toWibDate, toWibIso } from "../../server/common/clock.js";
 import { SCHEMA, type Baris, type SheetName, type TipeKolom } from "./schema.js";
 import type { CellValue, SheetData } from "./store.js";
 

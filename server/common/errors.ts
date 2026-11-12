@@ -27,7 +27,7 @@ export function validationError(errors: FieldErrors): AppError {
   return new AppError(400, "Data yang dikirim tidak valid.", errors);
 }
 
-/** 502: Google Sheets gagal diakses. */
+/** 502: database gagal diakses. */
 export function storageError(): AppError {
   return new AppError(502, "Gagal mengakses penyimpanan data.");
 }

@@ -29,3 +29,5 @@ dist-ssr
 .vercel
 service-account*.json
 *.key.json
+.env.*
+!.env.example

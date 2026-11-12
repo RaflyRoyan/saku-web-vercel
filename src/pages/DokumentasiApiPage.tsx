@@ -237,7 +237,7 @@ function Coba({ e }: { e: Endpoint }) {
         <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
           <input type="checkbox" checked={yakin} onChange={(ev) => setYakin(ev.target.checked)} className="mt-0.5 size-5 shrink-0 accent-brand-700" />
           <span>
-            <span className="font-semibold">Request ini mengubah data asli</span> di spreadsheet{e.awas ? `. ${e.awas}` : "."} Centang untuk mengirim.
+            <span className="font-semibold">Request ini mengubah data asli</span> di database{e.awas ? `. ${e.awas}` : "."} Centang untuk mengirim.
           </span>
         </label>
       )}

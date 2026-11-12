@@ -1,42 +1,20 @@
 import { z } from "zod";
-import { GoogleSheetStore } from "./sheets/google-store.js";
-import { FileSheetStore } from "./sheets/memory-store.js";
-import type { SheetStore } from "./sheets/store.js";
+import { createSql } from "./db/client.js";
+import { PostgresStore, type Store } from "./db/store.js";
 
-const envSchema = z
-  .object({
-    SHEETS_MODE: z.enum(["memory", "google"], {
-      error: "SHEETS_MODE harus 'memory' atau 'google'.",
-    }).default("memory"),
-    SPREADSHEET_ID: z.string().optional(),
-    GOOGLE_CLIENT_EMAIL: z.string().optional(),
-    GOOGLE_PRIVATE_KEY: z.string().optional(),
-    JWT_SECRET: z
-      .string({ error: "JWT_SECRET wajib diisi." })
-      .min(32, { error: "JWT_SECRET minimal 32 karakter." }),
-    JWT_EXPIRE_DAYS: z.coerce
-      .number({ error: "JWT_EXPIRE_DAYS harus berupa angka." })
-      .int({ error: "JWT_EXPIRE_DAYS harus bilangan bulat." })
-      .positive({ error: "JWT_EXPIRE_DAYS harus lebih dari 0." })
-      .default(30),
-  })
-  .superRefine((env, ctx) => {
-    if (env.SHEETS_MODE !== "google") return;
-    for (const key of ["SPREADSHEET_ID", "GOOGLE_CLIENT_EMAIL", "GOOGLE_PRIVATE_KEY"] as const) {
-      if (!env[key]) {
-        ctx.addIssue({
-          code: "custom",
-          path: [key],
-          message: `${key} wajib diisi jika SHEETS_MODE=google.`,
-        });
-      }
-    }
-  })
-  .transform((env) => ({
-    ...env,
-    // Private key dari env biasanya berisi "\n" literal
-    GOOGLE_PRIVATE_KEY: env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, "\n"),
-  }));
+const envSchema = z.object({
+  DATABASE_URL: z
+    .string({ error: "DATABASE_URL wajib diisi." })
+    .regex(/^postgres(ql)?:\/\//, { error: "DATABASE_URL harus diawali postgresql://." }),
+  JWT_SECRET: z
+    .string({ error: "JWT_SECRET wajib diisi." })
+    .min(32, { error: "JWT_SECRET minimal 32 karakter." }),
+  JWT_EXPIRE_DAYS: z.coerce
+    .number({ error: "JWT_EXPIRE_DAYS harus berupa angka." })
+    .int({ error: "JWT_EXPIRE_DAYS harus bilangan bulat." })
+    .positive({ error: "JWT_EXPIRE_DAYS harus lebih dari 0." })
+    .default(30),
+});
 
 export type AppConfig = z.infer<typeof envSchema>;
 
@@ -58,21 +36,10 @@ export function getConfig(): AppConfig {
   return cached;
 }
 
-export function createStore(config: AppConfig): SheetStore {
-  // Mode memory hanya untuk dev lokal; data disimpan di .data/ (tidak di-commit)
-  if (config.SHEETS_MODE === "memory") return new FileSheetStore(".data/saku-memory.json");
-  // superRefine sudah memastikan ketiganya terisi saat SHEETS_MODE=google
-  return new GoogleSheetStore({
-    spreadsheetId: config.SPREADSHEET_ID!,
-    clientEmail: config.GOOGLE_CLIENT_EMAIL!,
-    privateKey: config.GOOGLE_PRIVATE_KEY!,
-  });
-}
+let store: Store | undefined;
 
-let store: SheetStore | undefined;
-
-/** Satu store per instance function. Mode memory: data hilang saat instance mati. */
-export function getStore(): SheetStore {
-  store ??= createStore(getConfig());
+/** Satu koneksi database per instance function, dipakai ulang antar-request. */
+export function getStore(): Store {
+  store ??= new PostgresStore(createSql(getConfig().DATABASE_URL));
   return store;
 }

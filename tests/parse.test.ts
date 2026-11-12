@@ -7,8 +7,8 @@ import {
   parseRows,
   parseTanggal,
   toRow,
-} from "../server/sheets/parse";
-import { headerOf } from "../server/sheets/schema";
+} from "../scripts/sheets-lama/parse";
+import { headerOf } from "../scripts/sheets-lama/schema";
 
 describe("T16 · parser toleran", () => {
   it("tanggal serial number", () => {

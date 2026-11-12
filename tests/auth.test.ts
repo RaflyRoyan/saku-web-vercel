@@ -1,6 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { findOwned } from "../server/repositories/rows";
-import { parseRows } from "../server/sheets/parse";
+import { findOwned, type Row } from "../server/repositories/rows";
 import { ADMIN, setupTest } from "./helpers";
 
 const MENIT = 60 * 1000;
@@ -23,8 +22,8 @@ describe("T1 · setup awal", () => {
     expect(second.status).toBe(409);
     expect((await a.get("/auth/status")).body).toEqual({ perluSetup: false });
 
-    const { Kategori } = await store.readMany(["Kategori"]);
-    const kode = parseRows("Kategori", Kategori).map((r) => r.data.kode_sistem).filter(Boolean);
+    const { Kategori } = await store.read(["Kategori"]);
+    const kode = Kategori.map((r) => r.data.kode_sistem).filter(Boolean);
     expect(kode.sort()).toEqual(["BIAYA_ADMIN", "PATUNGAN", "SETOR_TABUNGAN", "TARIK_TABUNGAN"]);
 
     // Setup ulang tidak menggandakan kategori sistem (sudah ada)
@@ -125,14 +124,11 @@ describe("T3 · ganti password", () => {
 
 describe("T4 · data pengguna lain", () => {
   it("ID milik pengguna lain → 404", () => {
-    const rows = parseRows("Transaksi", {
-      header: [],
-      rows: [
-        { row: 2, values: ["TR-aaaaaaaa", "US-pemilika"] },
-        { row: 3, values: ["TR-bbbbbbbb", "US-pemilikb"] },
-      ],
-    });
-    expect(findOwned(rows, "TR-aaaaaaaa", "US-pemilika").row).toBe(2);
+    const rows = [
+      { data: { id: "TR-aaaaaaaa", user_id: "US-pemilika" } },
+      { data: { id: "TR-bbbbbbbb", user_id: "US-pemilikb" } },
+    ] as Row<"Transaksi">[];
+    expect(findOwned(rows, "TR-aaaaaaaa", "US-pemilika").data.id).toBe("TR-aaaaaaaa");
     expect(() => findOwned(rows, "TR-bbbbbbbb", "US-pemilika")).toThrowError(
       expect.objectContaining({ status: 404, title: "Data tidak ditemukan." }),
     );

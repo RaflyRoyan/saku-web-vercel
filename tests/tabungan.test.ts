@@ -186,7 +186,7 @@ describe("tutup periode: sisa diteruskan atau ditabung", () => {
       "teruskan.0.nominal": ["Maksimal Rp 699.000 (sisa Jago)."],
       "teruskan.2.nominal": ["Akun BCA dobel."],
     });
-    expect((await store.readMany(["Tabungan"])).Tabungan.rows).toHaveLength(0);
+    expect((await store.read(["Tabungan"])).Tabungan).toHaveLength(0);
     expect((await budi.get("/periode/aktif")).body.nama).toBe("Gajian Okt");
   });
 });

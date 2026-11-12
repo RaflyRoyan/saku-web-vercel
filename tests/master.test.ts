@@ -1,8 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { parseRows } from "../server/sheets/parse";
 import { saldoPerAkun } from "../server/services/saldo";
-import type { CellValue } from "../server/sheets/store";
-import { ADMIN, setupTest } from "./helpers";
+import { ADMIN, appendRaw, rowsDari, setupTest } from "./helpers";
 
 const BUDI = { username: "budi", password: "budi12345", nama: "Budi", peran: "user" };
 
@@ -18,10 +16,8 @@ async function withUsers() {
 
 describe("rumus saldo (spec §7.3)", () => {
   it("contoh bagi gaji T5", () => {
-    const rows = (sheet: "SaldoAwal" | "Transaksi", values: CellValue[][]) =>
-      parseRows(sheet, { header: [], rows: values.map((v, i) => ({ row: i + 2, values: v })) });
-    const saldoAwal = rows("SaldoAwal", [["SA-1", "US-a", "PR-1", "BCA", 6_000_000]]);
-    const transaksi = rows("Transaksi", [
+    const saldoAwal = rowsDari("SaldoAwal", [["SA-1", "US-a", "PR-1", "BCA", 6_000_000]]);
+    const transaksi = rowsDari("Transaksi", [
       ["TR-1", "US-a", "PR-1", "2026-10-25", "transfer", "BCA", "MANDIRI", "", 2_000_000, 2_500],
       ["TR-2", "US-a", "PR-1", "2026-10-25", "transfer", "BCA", "JAGO", "", 1_000_000, 0],
       ["TR-3", "US-a", "PR-1", "2026-10-25", "transfer", "JAGO", "GOPAY", "", 300_000, 1_000],
@@ -81,19 +77,19 @@ describe("akun (master bersama)", () => {
     const { admin, budi, store, adminId, budiId } = await withUsers();
     const bca = (await admin.post("/akun", { nama: "BCA", jenis: "bank" })).body;
 
-    // Periode & saldo diisi langsung ke store (endpoint periode/transaksi ada di M4)
-    await store.append("Periode", [
+    // Periode & saldo diisi langsung ke database (endpoint periode/transaksi ada di M4)
+    await appendRaw(store, "Periode", [
       ["PR-admin", adminId, "Periode Admin", "2026-10-25", ""],
       ["PR-budi", budiId, "Periode Budi", "2026-10-25", ""],
     ]);
-    await store.append("SaldoAwal", [["SA-1", adminId, "PR-admin", bca.id, 150_000]]);
+    await appendRaw(store, "SaldoAwal", [["SA-1", adminId, "PR-admin", bca.id, 150_000]]);
 
     const saldoAdmin = await admin.put(`/akun/${bca.id}/aktif`, { aktif: false });
     expect(saldoAdmin.status).toBe(409);
     expect(saldoAdmin.body.title).toBe("Saldo akun masih Rp 150.000. Pindahkan dulu sebelum dinonaktifkan.");
 
     // Saldo admin habis, tapi Budi masih punya saldo di akun yang sama
-    await store.append("Transaksi", [
+    await appendRaw(store, "Transaksi", [
       ["TR-1", adminId, "PR-admin", "2026-10-26", "keluar", bca.id, "", "KT-x", 150_000, 0],
       ["TR-2", budiId, "PR-budi", "2026-10-26", "masuk", bca.id, "", "KT-y", 50_000, 0],
     ]);
@@ -105,7 +101,7 @@ describe("akun (master bersama)", () => {
     expect((await budi.get("/akun")).body[0].saldo).toBe(50_000);
     expect((await admin.get("/akun")).body[0].saldo).toBe(0);
 
-    await store.append("Transaksi", [["TR-3", budiId, "PR-budi", "2026-10-27", "keluar", bca.id, "", "KT-x", 50_000, 0]]);
+    await appendRaw(store, "Transaksi", [["TR-3", budiId, "PR-budi", "2026-10-27", "keluar", bca.id, "", "KT-x", 50_000, 0]]);
     expect((await admin.put(`/akun/${bca.id}/aktif`, { aktif: false })).status).toBe(204);
     expect((await budi.get("/akun")).body).toEqual([]);
     expect((await budi.get("/akun?termasukNonaktif=true")).body[0]).toMatchObject({ nama: "BCA", aktif: false });

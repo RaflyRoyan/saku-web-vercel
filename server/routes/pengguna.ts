@@ -72,7 +72,7 @@ pengguna.put(
       // Nonaktif → semua sesi pengguna itu berakhir
       versi_token: (target.data.versi_token ?? 1) + (dinonaktifkan ? 1 : 0),
     };
-    await c.var.store().updateRow("Pengguna", target.row, updatedRow("Pengguna", target.data, changes, user.data.id, c.var.clock));
+    await c.var.store().updateRow("Pengguna", updatedRow("Pengguna", target.data, changes, user.data.id, c.var.clock));
     return c.json(toDto({ ...target.data, ...changes }));
   },
 );
@@ -90,6 +90,6 @@ pengguna.post("/:id/reset-password", jsonBody(z.object({ passwordBaru: passwordS
     gagal_login: 0,
     terkunci_sampai: null,
   };
-  await c.var.store().updateRow("Pengguna", target.row, updatedRow("Pengguna", target.data, changes, user.data.id, c.var.clock));
+  await c.var.store().updateRow("Pengguna", updatedRow("Pengguna", target.data, changes, user.data.id, c.var.clock));
   return c.body(null, 204);
 });

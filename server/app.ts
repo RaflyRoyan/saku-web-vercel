@@ -19,7 +19,7 @@ import { split } from "./routes/split.js";
 import { tagihanQris } from "./routes/tagihan-qris.js";
 import { tabungan } from "./routes/tabungan.js";
 import { transaksi } from "./routes/transaksi.js";
-import type { SheetStore } from "./sheets/store.js";
+import type { Store } from "./db/store.js";
 
 export interface Settings {
   jwtSecret: string;
@@ -28,8 +28,8 @@ export interface Settings {
 }
 
 export interface AppDeps {
-  /** Lazy supaya `/api/health` tidak butuh env/Google. */
-  store: () => SheetStore;
+  /** Lazy supaya `/api/health` tidak butuh env/database. */
+  store: () => Store;
   clock: Clock;
   settings: () => Settings;
 }
@@ -41,7 +41,7 @@ const envSettings = (): Settings => {
   return { jwtSecret: config.JWT_SECRET, jwtExpireDays: config.JWT_EXPIRE_DAYS, passwordIterations: DEFAULT_ITERATIONS };
 };
 
-/** Test memakai `createApp({ store: () => new MemorySheetStore(), clock: new FakeClock(...), settings })`. */
+/** Test memakai `createApp({ store: () => storeTest, clock: new FakeClock(...), settings })` (lihat tests/helpers.ts). */
 export function createApp(deps: Partial<AppDeps> = {}) {
   const resolved: AppDeps = {
     store: deps.store ?? getStore,

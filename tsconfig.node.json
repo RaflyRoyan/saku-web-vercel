@@ -20,5 +20,5 @@
     "erasableSyntaxOnly": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["vite.config.ts", "vitest.config.ts", "template/buat_template.ts", "scripts/buat_ikon.ts"]
+  "include": ["vite.config.ts", "vitest.config.ts", "scripts/buat_ikon.ts"]
 }

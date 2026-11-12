@@ -1,4 +1,4 @@
-import type { ParsedRow } from "../repositories/rows.js";
+import type { Row } from "../repositories/rows.js";
 import type { PilihanAkun } from "./akun-pengguna.js";
 import { periodeDto, type PeriodeDto } from "./periode.js";
 import { perKelompok, type PerKelompok } from "./kelompok.js";
@@ -64,14 +64,14 @@ function kategoriCounter(nama: (id: string) => string) {
  * Biaya admin transfer dihitung sebagai pengeluaran kategori `BIAYA_ADMIN` dari akun asal.
  */
 export function hitungRingkasan(
-  periode: ParsedRow<"Periode">["data"],
-  akun: ParsedRow<"Akun">[],
-  kategori: ParsedRow<"Kategori">[],
-  saldoAwal: ParsedRow<"SaldoAwal">[],
-  transaksi: ParsedRow<"Transaksi">[],
-  tabungan: ParsedRow<"Tabungan">[],
+  periode: Row<"Periode">["data"],
+  akun: Row<"Akun">[],
+  kategori: Row<"Kategori">[],
+  saldoAwal: Row<"SaldoAwal">[],
+  transaksi: Row<"Transaksi">[],
+  tabungan: Row<"Tabungan">[],
   pilihan: PilihanAkun,
-  kelompok: ParsedRow<"KelompokKategori">[],
+  kelompok: Row<"KelompokKategori">[],
 ): Ringkasan {
   const namaKategori = new Map(kategori.map((k) => [k.data.id, k.data.nama]));
   const biayaAdminKat = kategori.find((k) => k.data.kode_sistem === "BIAYA_ADMIN")?.data;

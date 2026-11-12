@@ -1,54 +1,18 @@
+// Tooling spreadsheet lama (dipakai skrip migrasi ke Supabase) + helper umum id & clock.
 import { describe, it, expect, vi } from "vitest";
 import { FakeClock, nowWibIso, todayWib } from "../server/common/clock";
 import { AppError } from "../server/common/errors";
 import { generateId } from "../server/common/id";
-import { withRetry } from "../server/sheets/google-store";
-import { MemorySheetStore } from "../server/sheets/memory-store";
-import { columnLetter, headerOf, ID_PREFIX, lastColumn, SHEET_NAMES } from "../server/sheets/schema";
-import { SheetMissingError } from "../server/sheets/store";
+import { withRetry } from "../scripts/sheets-lama/google-store";
+import { ID_PREFIX, NAMA_TABEL } from "../server/db/schema";
+import { columnLetter, headerOf, lastColumn } from "../scripts/sheets-lama/schema";
 
 describe("schema split bill", () => {
-  it("4 sheet baru dengan prefix ID & urutan kolom", () => {
-    for (const s of ["SplitBill", "SplitItem", "SplitPeserta", "Pengaturan"]) expect(SHEET_NAMES).toContain(s);
+  it("4 tabel baru dengan prefix ID & urutan kolom", () => {
+    for (const s of ["SplitBill", "SplitItem", "SplitPeserta", "Pengaturan"]) expect(NAMA_TABEL).toContain(s);
     expect(headerOf("SplitPeserta")).toEqual(["id", "user_id", "split_id", "nama", "saya", "nominal", "lunas", "transaksi_id", "urutan", "created_by", "created_at", "updated_by", "updated_at"]);
     expect(ID_PREFIX).toMatchObject({ SplitBill: "SB", SplitItem: "SI", SplitPeserta: "SP", Pengaturan: "PG", TagihanQris: "TQ" });
     expect(headerOf("TagihanQris")).toEqual(["id", "user_id", "tanggal", "nominal", "keterangan", "akun_id", "kategori_id", "lunas", "transaksi_id", "created_by", "created_at", "updated_by", "updated_at"]);
-  });
-});
-
-describe("MemorySheetStore", () => {
-  it("append, update, delete memakai nomor baris", async () => {
-    const store = new MemorySheetStore();
-    await store.append("Akun", [["AK-1", "US-1", "BCA"], ["AK-2", "US-1", "Jago"], ["AK-3", "US-1", "GoPay"]]);
-    await store.updateRow("Akun", 3, ["AK-2", "US-1", "Jago Syariah"]);
-    await store.updateRows([{ sheet: "Akun", row: 2, values: ["AK-1", "US-1", "BCA Utama"] }]);
-    await store.deleteRow("Akun", 2);
-
-    const { Akun } = await store.readMany(["Akun"]);
-    expect(Akun.rows).toEqual([
-      { row: 2, values: ["AK-2", "US-1", "Jago Syariah"] },
-      { row: 3, values: ["AK-3", "US-1", "GoPay"] },
-    ]);
-  });
-
-  it("hasil baca tidak bisa mengubah isi store", async () => {
-    const store = new MemorySheetStore();
-    await store.append("Akun", [["AK-1"]]);
-    const first = await store.readMany(["Akun"]);
-    first.Akun.rows[0].values[0] = "ubah";
-    const second = await store.readMany(["Akun"]);
-    expect(second.Akun.rows[0].values[0]).toBe("AK-1");
-  });
-
-  it("baris header atau di luar jangkauan ditolak", async () => {
-    const store = new MemorySheetStore();
-    await expect(store.updateRow("Akun", 1, [])).rejects.toThrow();
-    await expect(store.deleteRow("Akun", 2)).rejects.toThrow();
-  });
-
-  it("sheet tidak ada → SheetMissingError", async () => {
-    const store = new MemorySheetStore({ Akun: [["id"]] });
-    await expect(store.readMany(["Akun", "Transaksi"])).rejects.toBeInstanceOf(SheetMissingError);
   });
 });
 

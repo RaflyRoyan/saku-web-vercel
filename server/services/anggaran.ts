@@ -1,8 +1,8 @@
 import type { Clock } from "../common/clock.js";
 import { validationError, type FieldErrors } from "../common/errors.js";
 import { formatRupiah } from "../common/format.js";
-import { newId, newRow, type ParsedRow } from "../repositories/rows.js";
-import type { CellValue } from "../sheets/store.js";
+import { newId, newRow, type Row } from "../repositories/rows.js";
+import type { Baris } from "../db/schema.js";
 import { kelompokIdDari, LAINNYA, urutKelompok } from "./kelompok.js";
 
 export type StatusAnggaran = "aman" | "hampir" | "lewat";
@@ -41,9 +41,9 @@ export interface AnggaranPeriode {
   kelompok: AnggaranKelompok[];
 }
 
-type Anggaran = ParsedRow<"Anggaran">;
-type Kategori = ParsedRow<"Kategori">;
-type Kelompok = ParsedRow<"KelompokKategori">;
+type Anggaran = Row<"Anggaran">;
+type Kategori = Row<"Kategori">;
+type Kelompok = Row<"KelompokKategori">;
 
 export function pos(anggaran: number | null, terpakai: number): PosAnggaran {
   if (!anggaran || anggaran <= 0) return { anggaran: null, terpakai, sisa: null, persen: null, status: null };
@@ -56,7 +56,7 @@ export const anggaranMilik = (rows: Anggaran[], userId: string, periodeId: strin
   rows.filter((r) => r.data.user_id === userId && r.data.periode_id === periodeId);
 
 /** Pengeluaran per sub kategori di satu periode: keluar + biaya admin transfer (kategori BIAYA_ADMIN), sama dengan ringkasan. */
-export function terpakaiPerKategori(periodeId: string, userId: string, transaksi: ParsedRow<"Transaksi">[], kategori: Kategori[]): Map<string, number> {
+export function terpakaiPerKategori(periodeId: string, userId: string, transaksi: Row<"Transaksi">[], kategori: Kategori[]): Map<string, number> {
   const biayaAdminId = kategori.find((k) => k.data.kode_sistem === "BIAYA_ADMIN")?.data.id ?? "BIAYA_ADMIN";
   // Setor langsung ke tabungan bukan pengeluaran
   const setorId = kategori.find((k) => k.data.kode_sistem === "SETOR_TABUNGAN")?.data.id;
@@ -81,7 +81,7 @@ export function hitungAnggaran(
   anggaran: Anggaran[],
   kategori: Kategori[],
   kelompok: Kelompok[],
-  transaksi: ParsedRow<"Transaksi">[],
+  transaksi: Row<"Transaksi">[],
 ): AnggaranPeriode {
   const milik = anggaranMilik(anggaran, userId, periodeId);
   const batasKelompok = new Map<string, number>();
@@ -122,11 +122,11 @@ export function hitungAnggaran(
 
 /** Peringatan kalau transaksi pengeluaran ini membuat (atau masih) melewati anggaran sub kategori / kategori induknya. Tidak memblokir. */
 export function peringatanAnggaran(
-  t: ParsedRow<"Transaksi">["data"],
+  t: Row<"Transaksi">["data"],
   anggaran: Anggaran[],
   kategori: Kategori[],
   kelompok: Kelompok[],
-  transaksi: ParsedRow<"Transaksi">[],
+  transaksi: Row<"Transaksi">[],
 ): string[] {
   let kategoriId: string | undefined;
   if (t.tipe === "keluar") kategoriId = t.kategori_id;
@@ -213,11 +213,11 @@ export function salinAnggaran(
   kategori: Kategori[],
   kelompok: Kelompok[],
   clock: Clock,
-): CellValue[][] {
+): Baris<"Anggaran">[] {
   const katAktif = new Set(kategori.filter((k) => k.data.aktif && k.data.tipe === "keluar").map((k) => k.data.id));
   const kelAktif = new Set([LAINNYA.id, ...kelompok.filter((g) => g.data.aktif).map((g) => g.data.id)]);
   const taken: { data: { id: string } }[] = [...anggaran];
-  const rows: CellValue[][] = [];
+  const rows: Baris<"Anggaran">[] = [];
   for (const { data: a } of anggaranMilik(anggaran, userId, dariId)) {
     if ((a.nominal ?? 0) <= 0) continue;
     if (a.kategori_id ? !katAktif.has(a.kategori_id) : !kelAktif.has(a.kelompok_id)) continue;
